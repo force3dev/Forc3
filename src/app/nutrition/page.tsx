@@ -1,22 +1,37 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import BottomNav from "@/components/shared/BottomNav";
 
-interface MealLog {
+interface NutritionLog {
   id: string;
   date: string;
-  mealName?: string;
   calories: number;
-  proteinG?: number;
-  carbsG?: number;
-  fatG?: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  mealName?: string;
+  foodDescription?: string;
 }
 
+interface NutritionData {
+  logs: NutritionLog[];
+  totals: { calories: number; protein: number; carbs: number; fat: number };
+  targets: { calories: number; protein: number; carbs: number; fat: number };
+}
+
+const MEAL_PRESETS = [
+  { name: "Breakfast", cal: 400, protein: 30, carbs: 45, fat: 12 },
+  { name: "Lunch", cal: 600, protein: 45, carbs: 60, fat: 18 },
+  { name: "Dinner", cal: 700, protein: 50, carbs: 65, fat: 22 },
+  { name: "Protein Shake", cal: 200, protein: 40, carbs: 10, fat: 3 },
+  { name: "Snack", cal: 250, protein: 15, carbs: 25, fat: 8 },
+];
+
 export default function NutritionPage() {
-  const [meals, setMeals] = useState<MealLog[]>([]);
+  const [data, setData] = useState<NutritionData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [logging, setLogging] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [logging, setLogging] = useState(false);
 
   // Form state
   const [mealName, setMealName] = useState("");
@@ -25,123 +40,171 @@ export default function NutritionPage() {
   const [carbs, setCarbs] = useState("");
   const [fat, setFat] = useState("");
 
-  const fetchMeals = () => {
-    fetch("/api/nutrition")
-      .then(r => r.json())
-      .then(d => setMeals(d.items || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
+  async function loadData() {
+    try {
+      const res = await fetch("/api/nutrition");
+      if (res.ok) setData(await res.json());
+    } catch {} finally {
+      setLoading(false);
+    }
+  }
 
-  useEffect(() => { fetchMeals(); }, []);
+  useEffect(() => { loadData(); }, []);
 
-  // Today's meals only
-  const today = new Date().toDateString();
-  const todayMeals = meals.filter(m => new Date(m.date).toDateString() === today);
-
-  const totals = todayMeals.reduce(
-    (acc, m) => ({
-      calories: acc.calories + m.calories,
-      protein: acc.protein + (m.proteinG || 0),
-      carbs: acc.carbs + (m.carbsG || 0),
-      fat: acc.fat + (m.fatG || 0),
-    }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
-  );
-
-  const handleLogMeal = async (e: React.FormEvent) => {
+  async function handleLog(e: React.FormEvent) {
     e.preventDefault();
     if (!calories) return;
     setLogging(true);
-
     try {
       await fetch("/api/nutrition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mealName: mealName || undefined,
-          calories: parseInt(calories),
-          proteinG: protein ? parseInt(protein) : undefined,
-          carbsG: carbs ? parseInt(carbs) : undefined,
-          fatG: fat ? parseInt(fat) : undefined,
+          mealName: mealName || null,
+          calories: parseFloat(calories),
+          protein: parseFloat(protein) || 0,
+          carbs: parseFloat(carbs) || 0,
+          fat: parseFloat(fat) || 0,
         }),
       });
-
-      setMealName("");
-      setCalories("");
-      setProtein("");
-      setCarbs("");
-      setFat("");
+      setMealName(""); setCalories(""); setProtein(""); setCarbs(""); setFat("");
       setShowForm(false);
-      fetchMeals();
-    } catch {
-      // silent fail
+      loadData();
     } finally {
       setLogging(false);
     }
+  }
+
+  async function deleteLog(id: string) {
+    await fetch(`/api/nutrition?id=${id}`, { method: "DELETE" });
+    loadData();
+  }
+
+  const applyPreset = (p: typeof MEAL_PRESETS[0]) => {
+    setMealName(p.name);
+    setCalories(p.cal.toString());
+    setProtein(p.protein.toString());
+    setCarbs(p.carbs.toString());
+    setFat(p.fat.toString());
   };
 
-  const MacroBar = ({ label, value, target, color }: { label: string; value: number; target: number; color: string }) => (
-    <div>
-      <div className="flex justify-between text-sm mb-1.5">
-        <span className="text-neutral-400">{label}</span>
-        <span>{value}g</span>
-      </div>
-      <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${color}`}
-          style={{ width: `${Math.min(100, target > 0 ? (value / target) * 100 : 0)}%` }}
-        />
-      </div>
-    </div>
-  );
+  const t = data?.totals ?? { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  const tgt = data?.targets ?? { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+
+  const calPct = Math.min(100, (t.calories / tgt.calories) * 100);
+  const protPct = Math.min(100, (t.protein / tgt.protein) * 100);
+  const carbPct = Math.min(100, (t.carbs / tgt.carbs) * 100);
+  const fatPct = Math.min(100, (t.fat / tgt.fat) * 100);
+
+  const remaining = {
+    calories: Math.max(0, tgt.calories - t.calories),
+    protein: Math.max(0, tgt.protein - t.protein),
+  };
 
   return (
-    <main className="min-h-screen bg-black text-white pb-24">
-      <header className="p-6 pb-4">
-        <div className="text-xs font-semibold tracking-widest text-neutral-500">FORCE3</div>
-        <h1 className="text-xl font-semibold mt-1">Nutrition</h1>
-        <p className="text-sm text-neutral-500 mt-0.5">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
+    <main className="min-h-screen bg-black text-white pb-28">
+      <header className="px-6 pt-8 pb-4">
+        <div className="text-xs font-bold tracking-widest text-[#0066FF]">FORC3</div>
+        <h1 className="text-2xl font-bold mt-1">Nutrition</h1>
+        <p className="text-sm text-neutral-500">
+          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+        </p>
       </header>
 
-      <div className="px-6 space-y-4">
-        {/* Today's Summary */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-          <div className="text-xs text-neutral-500 uppercase tracking-wide mb-4">Today</div>
-
-          {/* Calories */}
-          <div className="mb-5">
-            <div className="flex items-end justify-between mb-2">
-              <div>
-                <div className="text-3xl font-semibold">{totals.calories}</div>
-                <div className="text-xs text-neutral-500 mt-0.5">calories consumed</div>
-              </div>
+      <div className="px-6 space-y-5">
+        {/* Macro Summary Ring-style */}
+        <div className="bg-[#141414] border border-[#262626] rounded-2xl p-5">
+          {/* Calories big number */}
+          <div className="flex items-end justify-between mb-5">
+            <div>
+              <div className="text-4xl font-bold tabular-nums">{Math.round(t.calories)}</div>
+              <div className="text-xs text-neutral-500 mt-1">of {Math.round(tgt.calories)} kcal</div>
+            </div>
+            <div className="text-right">
+              <div className="text-lg font-bold text-[#0066FF]">{Math.round(remaining.calories)}</div>
+              <div className="text-xs text-neutral-500">remaining</div>
             </div>
           </div>
 
-          {/* Macros */}
-          <div className="space-y-3">
-            <MacroBar label="Protein" value={totals.protein} target={180} color="bg-emerald-500" />
-            <MacroBar label="Carbs" value={totals.carbs} target={220} color="bg-blue-500" />
-            <MacroBar label="Fat" value={totals.fat} target={70} color="bg-amber-500" />
+          {/* Progress bar - Calories */}
+          <div className="h-3 bg-[#0a0a0a] rounded-full overflow-hidden mb-5">
+            <div
+              className="h-full bg-[#0066FF] rounded-full transition-all"
+              style={{ width: `${calPct}%` }}
+            />
           </div>
+
+          {/* Macros */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Protein", value: t.protein, target: tgt.protein, pct: protPct, color: "#00C853", unit: "g" },
+              { label: "Carbs", value: t.carbs, target: tgt.carbs, pct: carbPct, color: "#0066FF", unit: "g" },
+              { label: "Fat", value: t.fat, target: tgt.fat, pct: fatPct, color: "#FFB300", unit: "g" },
+            ].map(macro => (
+              <div key={macro.label} className="bg-[#0a0a0a] rounded-xl p-3">
+                <div className="text-xs text-neutral-500 mb-1">{macro.label}</div>
+                <div className="text-lg font-bold tabular-nums">{Math.round(macro.value)}<span className="text-xs text-neutral-500 font-normal">{macro.unit}</span></div>
+                <div className="text-xs text-neutral-600 mb-2">/ {Math.round(macro.target)}{macro.unit}</div>
+                <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${macro.pct}%`, background: macro.color }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Protein reminder */}
+          {remaining.protein > 0 && (
+            <div className="mt-4 p-3 bg-[#00C853]/10 border border-[#00C853]/20 rounded-xl">
+              <p className="text-xs text-[#00C853]">
+                {Math.round(remaining.protein)}g protein remaining — prioritize protein at each meal
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Log a Meal */}
-        {showForm ? (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-4">Log Meal</div>
-            <form onSubmit={handleLogMeal} className="space-y-3">
+        {/* Log Meal Button / Form */}
+        {!showForm ? (
+          <button
+            onClick={() => setShowForm(true)}
+            className="w-full py-4 bg-[#0066FF] text-white font-bold rounded-2xl hover:bg-[#0052CC] transition-colors"
+          >
+            + Log Meal
+          </button>
+        ) : (
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Log a Meal</h3>
+              <button onClick={() => setShowForm(false)} className="text-neutral-500 text-lg">✕</button>
+            </div>
+
+            {/* Quick presets */}
+            <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+              {MEAL_PRESETS.map(p => (
+                <button
+                  key={p.name}
+                  onClick={() => applyPreset(p)}
+                  className="flex-shrink-0 px-3 py-1.5 bg-[#0a0a0a] border border-[#262626] rounded-xl text-xs text-neutral-400 hover:border-[#0066FF] hover:text-white transition-colors"
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleLog} className="space-y-3">
               <div>
-                <label className="text-xs text-neutral-400">Meal name (optional)</label>
+                <label className="text-xs text-neutral-400">What did you eat?</label>
                 <input
                   type="text"
                   value={mealName}
                   onChange={e => setMealName(e.target.value)}
-                  placeholder="e.g. Chicken rice bowl"
-                  className="mt-1.5 w-full p-3 bg-neutral-800 border border-neutral-700 rounded-xl focus:border-white focus:outline-none text-sm transition-colors"
+                  placeholder="e.g. Chicken and rice"
+                  className="mt-1.5 w-full p-3 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none text-sm transition-colors"
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-neutral-400">Calories *</label>
@@ -151,7 +214,7 @@ export default function NutritionPage() {
                     onChange={e => setCalories(e.target.value)}
                     placeholder="500"
                     required
-                    className="mt-1.5 w-full p-3 bg-neutral-800 border border-neutral-700 rounded-xl focus:border-white focus:outline-none text-sm transition-colors"
+                    className="mt-1.5 w-full p-3 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none text-sm transition-colors"
                   />
                 </div>
                 <div>
@@ -161,7 +224,7 @@ export default function NutritionPage() {
                     value={protein}
                     onChange={e => setProtein(e.target.value)}
                     placeholder="40"
-                    className="mt-1.5 w-full p-3 bg-neutral-800 border border-neutral-700 rounded-xl focus:border-white focus:outline-none text-sm transition-colors"
+                    className="mt-1.5 w-full p-3 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none text-sm transition-colors"
                   />
                 </div>
                 <div>
@@ -171,7 +234,7 @@ export default function NutritionPage() {
                     value={carbs}
                     onChange={e => setCarbs(e.target.value)}
                     placeholder="60"
-                    className="mt-1.5 w-full p-3 bg-neutral-800 border border-neutral-700 rounded-xl focus:border-white focus:outline-none text-sm transition-colors"
+                    className="mt-1.5 w-full p-3 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none text-sm transition-colors"
                   />
                 </div>
                 <div>
@@ -181,57 +244,52 @@ export default function NutritionPage() {
                     value={fat}
                     onChange={e => setFat(e.target.value)}
                     placeholder="15"
-                    className="mt-1.5 w-full p-3 bg-neutral-800 border border-neutral-700 rounded-xl focus:border-white focus:outline-none text-sm transition-colors"
+                    className="mt-1.5 w-full p-3 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none text-sm transition-colors"
                   />
                 </div>
               </div>
-              <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="flex-1 py-3 border border-neutral-700 text-sm rounded-xl hover:border-neutral-500 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={logging || !calories}
-                  className="flex-1 py-3 bg-white text-black text-sm font-semibold rounded-xl hover:bg-neutral-200 transition-colors disabled:opacity-50"
-                >
-                  {logging ? "Logging..." : "Log Meal"}
-                </button>
-              </div>
+
+              <button
+                type="submit"
+                disabled={logging || !calories}
+                className={`w-full py-3 font-bold rounded-xl transition-all ${
+                  logging || !calories
+                    ? "bg-neutral-800 text-neutral-500 cursor-not-allowed"
+                    : "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+                }`}
+              >
+                {logging ? "Logging..." : "Log Meal"}
+              </button>
             </form>
           </div>
-        ) : (
-          <button
-            onClick={() => setShowForm(true)}
-            className="w-full py-4 bg-neutral-900 border border-neutral-800 rounded-2xl text-sm font-medium hover:border-neutral-600 transition-colors"
-          >
-            + Log a Meal
-          </button>
         )}
 
-        {/* Today's Meals */}
-        {todayMeals.length > 0 && (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-            <div className="p-4 border-b border-neutral-800">
-              <div className="text-xs text-neutral-500 uppercase tracking-wide">Meals Logged Today</div>
+        {/* Meals logged today */}
+        {(data?.logs?.length ?? 0) > 0 && (
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#262626]">
+              <h3 className="text-sm font-semibold text-neutral-300">Today&apos;s Meals</h3>
             </div>
-            <div className="divide-y divide-neutral-800">
-              {todayMeals.map(meal => (
-                <div key={meal.id} className="p-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">{meal.mealName || "Meal"}</div>
+            <div className="divide-y divide-[#1a1a1a]">
+              {data!.logs.map(log => (
+                <div key={log.id} className="px-5 py-3 flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{log.mealName || "Meal"}</div>
                     <div className="text-xs text-neutral-500 mt-0.5">
-                      {[
-                        meal.proteinG ? `${meal.proteinG}g protein` : null,
-                        meal.carbsG ? `${meal.carbsG}g carbs` : null,
-                        meal.fatG ? `${meal.fatG}g fat` : null,
-                      ].filter(Boolean).join(" · ")}
+                      {log.protein > 0 && `${Math.round(log.protein)}g P`}
+                      {log.carbs > 0 && ` · ${Math.round(log.carbs)}g C`}
+                      {log.fat > 0 && ` · ${Math.round(log.fat)}g F`}
                     </div>
                   </div>
-                  <div className="text-sm font-medium">{meal.calories} cal</div>
+                  <div className="flex items-center gap-3 ml-3">
+                    <span className="font-semibold tabular-nums">{Math.round(log.calories)}</span>
+                    <button
+                      onClick={() => deleteLog(log.id)}
+                      className="text-neutral-600 hover:text-red-400 transition-colors text-lg leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -239,39 +297,13 @@ export default function NutritionPage() {
         )}
 
         {loading && (
-          <div className="text-center text-neutral-600 text-sm py-4">Loading...</div>
+          <div className="flex justify-center py-6">
+            <div className="w-6 h-6 border-2 border-[#0066FF] border-t-transparent rounded-full animate-spin" />
+          </div>
         )}
       </div>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-black border-t border-neutral-900 px-6 py-4">
-        <div className="flex items-center justify-around max-w-md mx-auto">
-          <Link href="/dashboard" className="flex flex-col items-center text-neutral-500 hover:text-white transition-colors">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-            <span className="text-xs mt-1">Home</span>
-          </Link>
-          <Link href="/plan" className="flex flex-col items-center text-neutral-500 hover:text-white transition-colors">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <span className="text-xs mt-1">Plan</span>
-          </Link>
-          <Link href="/nutrition" className="flex flex-col items-center text-white">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            <span className="text-xs mt-1">Nutrition</span>
-          </Link>
-          <Link href="/profile" className="flex flex-col items-center text-neutral-500 hover:text-white transition-colors">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            <span className="text-xs mt-1">Profile</span>
-          </Link>
-        </div>
-      </nav>
+      <BottomNav active="nutrition" />
     </main>
   );
 }

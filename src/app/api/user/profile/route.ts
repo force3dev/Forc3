@@ -1,50 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await getCurrentUser();
-  const targetUser = user || await prisma.user.findFirst({ include: { profile: true } });
-  if (!targetUser) return NextResponse.json({ error: "No user" }, { status: 401 });
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const profile = await prisma.profile.findUnique({ where: { userId: targetUser.id } });
-  const plan = await prisma.trainingPlan.findUnique({ where: { userId: targetUser.id } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { profile: true, subscription: true, streak: true },
+  });
+
+  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   return NextResponse.json({
-    user: { id: targetUser.id, email: targetUser.email, name: targetUser.name },
-    profile,
-    plan: plan ? { name: plan.name, splitType: plan.splitType, totalWeeks: plan.totalWeeks, currentWeek: plan.currentWeek } : null,
+    id: user.id,
+    email: user.email,
+    profile: user.profile,
+    subscription: user.subscription,
+    streak: user.streak,
   });
 }
 
-export async function POST(req: NextRequest) {
-  const {
-    age, heightCm, weightKg, unitSystem,
-    goal, experience, trainingDays, sports,
-    eventType, eventDate, injuries, injuryNotes,
-  } = await req.json();
+export async function PATCH(req: NextRequest) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const first = await prisma.user.findFirst();
-  if (!first) return NextResponse.json({ error: "No user" }, { status: 401 });
+  const body = await req.json();
 
-  await prisma.profile.upsert({
-    where: { userId: first.id },
-    create: {
-      userId: first.id,
-      age, heightCm, weightKg, unitSystem,
-      goal, experience, trainingDays, sports,
-      eventType,
-      eventDate: eventDate ? new Date(eventDate) : null,
-      injuries, injuryNotes,
-    },
-    update: {
-      age, heightCm, weightKg, unitSystem,
-      goal, experience, trainingDays, sports,
-      eventType,
-      eventDate: eventDate ? new Date(eventDate) : null,
-      injuries, injuryNotes,
-    },
+  const profile = await prisma.profile.upsert({
+    where: { userId },
+    update: body,
+    create: { userId, ...body },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(profile);
 }

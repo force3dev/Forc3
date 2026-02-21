@@ -1,10 +1,9 @@
 "use client";
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-export default function Home() {
+export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,16 +15,24 @@ export default function Home() {
     setLoading(true);
     setError(null);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (result?.ok) {
-      router.push("/dashboard");
-    } else {
-      setError("Invalid email or password");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Invalid email or password");
+        return;
+      }
+
+      router.push(data.redirectTo || "/dashboard");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
       setLoading(false);
     }
   }
@@ -34,8 +41,8 @@ export default function Home() {
     <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-8">
         <div className="space-y-1">
-          <div className="text-xs font-semibold tracking-widest text-neutral-500">FORCE3</div>
-          <h1 className="text-2xl font-semibold">Sign in</h1>
+          <div className="text-xs font-semibold tracking-widest text-[#0066FF]">FORC3</div>
+          <h1 className="text-3xl font-bold">Sign in</h1>
           <p className="text-sm text-neutral-500">PhD-level coaching at app prices.</p>
         </div>
 
@@ -46,7 +53,7 @@ export default function Home() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="mt-2 w-full p-4 bg-neutral-900 border border-neutral-800 rounded-xl focus:border-white focus:outline-none transition-colors"
+              className="mt-2 w-full p-4 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none transition-colors"
               placeholder="you@example.com"
               required
               autoComplete="email"
@@ -59,7 +66,7 @@ export default function Home() {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="mt-2 w-full p-4 bg-neutral-900 border border-neutral-800 rounded-xl focus:border-white focus:outline-none transition-colors"
+              className="mt-2 w-full p-4 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none transition-colors"
               placeholder="••••••••"
               required
               autoComplete="current-password"
@@ -67,7 +74,7 @@ export default function Home() {
           </div>
 
           {error && (
-            <div className="p-4 bg-red-900/30 border border-red-800 rounded-xl text-red-400 text-sm">
+            <div className="p-4 bg-red-900/20 border border-red-800 rounded-xl text-red-400 text-sm">
               {error}
             </div>
           )}
@@ -75,10 +82,10 @@ export default function Home() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-4 font-semibold rounded-xl transition-all ${
+            className={`w-full py-4 font-bold rounded-xl transition-all ${
               loading
                 ? "bg-neutral-800 text-neutral-500 cursor-not-allowed"
-                : "bg-white text-black hover:bg-neutral-200"
+                : "bg-[#0066FF] text-white hover:bg-[#0052CC]"
             }`}
           >
             {loading ? "Signing in..." : "Sign in"}
@@ -87,8 +94,8 @@ export default function Home() {
 
         <p className="text-sm text-neutral-500 text-center">
           No account?{" "}
-          <Link href="/signup" className="text-white underline underline-offset-2">
-            Create one
+          <Link href="/signup" className="text-[#0066FF] hover:text-[#0052CC] transition-colors">
+            Create one free
           </Link>
         </p>
       </div>

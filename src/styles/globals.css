@@ -4,8 +4,89 @@
 
 :root {
   color-scheme: dark;
+
+  /* FORC3 Design System */
+  --background: #000000;
+  --surface: #0a0a0a;
+  --card: #141414;
+  --card-hover: #1a1a1a;
+  --border: #262626;
+
+  --primary: #0066FF;
+  --primary-hover: #0052CC;
+  --primary-glow: rgba(0, 102, 255, 0.15);
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --text-muted: #666666;
+
+  --success: #00C853;
+  --warning: #FFB300;
+  --error: #FF3D00;
+  --info: #00B8D4;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  @apply bg-black text-gray-100;
+  background-color: #000000;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+/* Hide scrollbars but keep scrollability */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe area insets for mobile */
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Number inputs - remove spinners */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, color, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+/* Focus styles */
+:focus-visible {
+  outline: 2px solid #0066FF;
+  outline-offset: 2px;
+}
+
+/* Disable default button styles */
+button {
+  cursor: pointer;
+}
+
+/* Prevent body scroll when modal open */
+body.modal-open {
+  overflow: hidden;
 }

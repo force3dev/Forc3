@@ -1,0 +1,68 @@
+import { NextRequest, NextResponse } from "next/server";
+import { hash } from "bcryptjs";
+import { prisma } from "@/lib/prisma";
+import { createSession, sessionCookieOptions } from "@/lib/auth";
+import { TRIAL_DAYS } from "@/lib/subscription/tiers";
+
+export async function POST(req: NextRequest) {
+  try {
+    const { email, password } = await req.json();
+
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email and password required" }, { status: 400 });
+    }
+
+    if (password.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+    }
+
+    if (!/\d/.test(password)) {
+      return NextResponse.json({ error: "Password must contain at least 1 number" }, { status: 400 });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+    }
+
+    const passwordHash = await hash(password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        profile: {
+          create: {
+            onboardingDone: false,
+          },
+        },
+        subscription: {
+          create: {
+            tier: "free",
+            status: "active",
+            trialEnd: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
+          },
+        },
+        streak: {
+          create: {
+            currentStreak: 0,
+            longestStreak: 0,
+          },
+        },
+      },
+    });
+
+    const token = await createSession({
+      userId: user.id,
+      email: user.email,
+      onboardingDone: false,
+    });
+
+    const res = NextResponse.json({ success: true });
+    res.cookies.set(sessionCookieOptions(token));
+    return res;
+  } catch (err) {
+    console.error("Signup error:", err);
+    return NextResponse.json({ error: "Failed to create account" }, { status: 500 });
+  }
+}

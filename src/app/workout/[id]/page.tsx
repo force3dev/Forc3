@@ -1,155 +1,366 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { calculatePlates } from "@/lib/calculations/plateCalculator";
 
-interface SetData {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface LoggedSet {
   setNumber: number;
-  targetReps: number;
-  actualReps: number;
-  targetWeight: number;
-  actualWeight: number;
-  completed: boolean;
+  weight: number;
+  reps: number;
+  rpe?: number;
+  isPR?: boolean;
+  logged: boolean;
 }
 
-interface ExerciseData {
+interface Exercise {
   id: string;
-  exerciseName: string;
-  targetSets: number;
-  targetReps: string;
-  suggestedWeight: number;
+  exerciseId: string;
+  name: string;
+  sets: number;
+  repsMin: number;
+  repsMax: number;
+  rpe?: number;
   restSeconds: number;
-  notes?: string;
-  sets: SetData[];
+  muscleGroups: string[];
+  lastWeight: number | null;
+  lastSets: { reps: number; weight: number }[];
+  suggestedWeight: number | null;
+  progressionBadge: string | null;
+  progressionReason: string | null;
+  loggedSets: LoggedSet[];
 }
 
-interface SessionData {
+interface WorkoutData {
   id: string;
-  sessionType: string;
-  cardioType?: string;
-  targetDuration?: number;
-  targetDistance?: number;
-  notes?: string;
-  exercises: ExerciseData[];
+  name: string;
+  exercises: Exercise[];
 }
 
-const SESSION_NAMES: Record<string, string> = {
-  push: 'Push', pull: 'Pull', legs: 'Legs',
-  upper: 'Upper Body', lower: 'Lower Body', full_body: 'Full Body',
-  run: 'Run', bike: 'Cycling', swim: 'Swimming', row: 'Rowing',
-};
+// ─── Rest Timer Component ─────────────────────────────────────────────────────
+
+function RestTimer({
+  seconds,
+  onDone,
+}: {
+  seconds: number;
+  onDone: () => void;
+}) {
+  const [remaining, setRemaining] = useState(seconds);
+  const [running, setRunning] = useState(true);
+
+  useEffect(() => {
+    if (!running) return;
+    const interval = setInterval(() => {
+      setRemaining(r => {
+        if (r <= 1) {
+          clearInterval(interval);
+          setRunning(false);
+          onDone();
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [running, onDone]);
+
+  const pct = ((seconds - remaining) / seconds) * 100;
+  const mins = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+
+  return (
+    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-6">
+      <div className="w-full max-w-xs text-center space-y-6">
+        <p className="text-neutral-400 text-sm uppercase tracking-widest">Rest</p>
+        <div className="relative w-40 h-40 mx-auto">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 160 160">
+            <circle cx="80" cy="80" r="70" fill="none" stroke="#1a1a1a" strokeWidth="8" />
+            <circle
+              cx="80" cy="80" r="70" fill="none"
+              stroke="#0066FF" strokeWidth="8"
+              strokeDasharray={`${2 * Math.PI * 70}`}
+              strokeDashoffset={`${2 * Math.PI * 70 * (1 - pct / 100)}`}
+              strokeLinecap="round"
+              style={{ transition: "stroke-dashoffset 1s linear" }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-4xl font-bold tabular-nums">
+              {mins}:{secs.toString().padStart(2, "0")}
+            </span>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => { setRemaining(r => Math.max(0, r - 30)); }}
+            className="flex-1 py-3 bg-[#1a1a1a] rounded-xl text-sm"
+          >
+            −30s
+          </button>
+          <button
+            onClick={() => { setRunning(false); onDone(); }}
+            className="flex-1 py-3 bg-[#0066FF] rounded-xl font-semibold"
+          >
+            Skip
+          </button>
+          <button
+            onClick={() => { setRemaining(r => r + 30); }}
+            className="flex-1 py-3 bg-[#1a1a1a] rounded-xl text-sm"
+          >
+            +30s
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PR Celebration ───────────────────────────────────────────────────────────
+
+function PRCelebration({ prType, onDone }: { prType: "1rm" | "volume" | null; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 3000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
+  return (
+    <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50">
+      <div className="text-center space-y-4">
+        <div className="text-6xl animate-bounce">🏆</div>
+        <h2 className="text-2xl font-bold text-[#FFB300]">New PR!</h2>
+        <p className="text-neutral-400">
+          {prType === "1rm" ? "New estimated 1-rep max!" :
+           prType === "volume" ? "New volume PR — most reps × weight in a set!" :
+           "Personal Record Broken!"}
+        </p>
+        <button
+          onClick={onDone}
+          className="px-6 py-2 bg-[#FFB300]/20 text-[#FFB300] border border-[#FFB300]/30 rounded-xl text-sm font-semibold"
+        >
+          Let&apos;s go!
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Plate Calculator Modal ───────────────────────────────────────────────────
+
+function PlateCalculatorModal({
+  weight,
+  onClose,
+}: {
+  weight: number;
+  onClose: () => void;
+}) {
+  const [w, setW] = useState(weight);
+  const breakdown = calculatePlates(w, "lbs");
+
+  return (
+    <div className="fixed inset-0 bg-black/90 z-50 flex items-end">
+      <div className="w-full bg-[#141414] border-t border-[#262626] rounded-t-2xl p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg">Plate Calculator</h3>
+          <button onClick={onClose} className="text-neutral-500 text-lg">✕</button>
+        </div>
+
+        <div className="relative">
+          <input
+            type="number"
+            value={w}
+            onChange={e => setW(parseFloat(e.target.value) || 0)}
+            className="w-full p-4 pr-16 bg-[#0a0a0a] border border-[#262626] rounded-xl text-center text-2xl font-bold focus:border-[#0066FF] focus:outline-none"
+            step={2.5}
+          />
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500">lbs</span>
+        </div>
+
+        <div className="bg-[#0a0a0a] rounded-xl p-4">
+          <div className="flex items-center justify-between text-sm mb-3">
+            <span className="text-neutral-400">Bar: {breakdown.bar} lbs</span>
+            <span className="text-neutral-400">Per side:</span>
+          </div>
+          {breakdown.platesPerSide.length > 0 ? (
+            <div className="space-y-2">
+              {breakdown.platesPerSide.map((p, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex gap-2">
+                    {Array.from({ length: p.count }).map((_, j) => (
+                      <div
+                        key={j}
+                        className="h-8 rounded-md flex items-center justify-center text-xs font-bold text-black"
+                        style={{
+                          width: Math.max(24, p.weight * 0.8) + "px",
+                          background: p.weight >= 45 ? "#FFB300" : p.weight >= 25 ? "#0066FF" : p.weight >= 10 ? "#00C853" : "#A0A0A0",
+                        }}
+                      >
+                        {p.weight}
+                      </div>
+                    ))}
+                  </div>
+                  <span className="text-neutral-400 text-sm">{p.count}×{p.weight}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-neutral-500 text-sm text-center">Bar only</p>
+          )}
+          <div className="mt-3 pt-3 border-t border-[#262626] flex justify-between text-sm font-semibold">
+            <span>Total</span>
+            <span>{breakdown.totalWeight} lbs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Workout Page ────────────────────────────────────────────────────────
 
 export default function WorkoutPage() {
   const router = useRouter();
   const params = useParams();
-  const sessionId = params.id as string;
+  const workoutId = params.id as string;
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [currentExercise, setCurrentExercise] = useState(0);
-  const [workoutComplete, setWorkoutComplete] = useState(false);
-  const [progressionResults, setProgressionResults] = useState<any[]>([]);
-  const [cardioDuration, setCardioDuration] = useState(0);
-  const [cardioDistance, setCardioDistance] = useState(0);
+  const [workout, setWorkout] = useState<WorkoutData | null>(null);
+  const [logId, setLogId] = useState<string | null>(null);
+  const [activeExIdx, setActiveExIdx] = useState<number | null>(null);
+  const [showTimer, setShowTimer] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(120);
+  const [showPlateCalc, setShowPlateCalc] = useState(false);
+  const [plateCalcWeight, setPlateCalcWeight] = useState(135);
+  const [showPR, setShowPR] = useState(false);
+  const [prType, setPrType] = useState<"1rm" | "volume" | null>(null);
+  const [completing, setCompleting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [completionData, setCompletionData] = useState<{ duration: number; totalVolume: number } | null>(null);
 
+  const startTime = useRef(Date.now());
+
+  // Load workout data
   useEffect(() => {
-    async function fetchSession() {
+    async function load() {
       try {
-        const res = await fetch('/api/workouts/today');
+        const res = await fetch("/api/workouts/today");
         const data = await res.json();
 
-        if (data.sessions) {
-          const found = data.sessions.find((s: any) => s.id === sessionId);
-          if (found) {
-            const enhanced = {
-              ...found,
-              exercises: found.exercises.map((ex: any) => {
-                const reps = parseInt(ex.targetReps) || 8;
-                return {
-                  ...ex,
-                  sets: Array.from({ length: ex.targetSets }, (_, i) => ({
-                    setNumber: i + 1,
-                    targetReps: reps,
-                    actualReps: reps,
-                    targetWeight: ex.suggestedWeight || 45,
-                    actualWeight: ex.suggestedWeight || 45,
-                    completed: false,
-                  })),
-                };
-              }),
-            };
-            setSession(enhanced);
-            if (found.targetDuration) setCardioDuration(found.targetDuration);
-            if (found.targetDistance) setCardioDistance(found.targetDistance);
-          }
-        }
-      } catch (e) {
-        console.error('Fetch error:', e);
+        if (!data.workout) { router.push("/dashboard"); return; }
+
+        const w = data.workout;
+
+        // Initialize logged sets for each exercise
+        const exercises: Exercise[] = w.exercises.map((ex: Exercise) => ({
+          ...ex,
+          progressionBadge: ex.progressionBadge || null,
+          progressionReason: ex.progressionReason || null,
+          loggedSets: Array.from({ length: ex.sets }, (_, i) => ({
+            setNumber: i + 1,
+            weight: ex.suggestedWeight || ex.lastWeight || 45,
+            reps: ex.repsMax,
+            logged: false,
+          })),
+        }));
+
+        setWorkout({ id: w.id, name: w.name, exercises });
+
+        // Start the workout log
+        const logRes = await fetch("/api/workouts/log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "start", workoutId: w.id }),
+        });
+        const logData = await logRes.json();
+        setLogId(logData.logId);
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoading(false);
       }
     }
-    fetchSession();
-  }, [sessionId]);
+    load();
+  }, [router, workoutId]);
 
-  const updateSet = (exIdx: number, setIdx: number, updates: Partial<SetData>) => {
-    if (!session) return;
-    const newEx = [...session.exercises];
-    newEx[exIdx].sets[setIdx] = { ...newEx[exIdx].sets[setIdx], ...updates };
-    setSession({ ...session, exercises: newEx });
+  const updateSet = (exIdx: number, setIdx: number, patch: Partial<LoggedSet>) => {
+    setWorkout(prev => {
+      if (!prev) return prev;
+      const exercises = [...prev.exercises];
+      const sets = [...exercises[exIdx].loggedSets];
+      sets[setIdx] = { ...sets[setIdx], ...patch };
+      exercises[exIdx] = { ...exercises[exIdx], loggedSets: sets };
+      return { ...prev, exercises };
+    });
   };
 
-  const finishWorkout = async () => {
-    if (!session) return;
-    setSaving(true);
-    try {
-      const isCardio = session.exercises.length === 0;
-      const body = isCardio ? {
-        sessionId: session.id,
-        sessionType: session.sessionType,
-        duration: cardioDuration,
-        distance: cardioDistance,
-      } : {
-        sessionId: session.id,
-        sessionType: session.sessionType,
-        exercises: session.exercises.map((ex, i) => ({
-          name: ex.exerciseName,
-          order: i,
-          targetSets: ex.targetSets,
-          targetReps: parseInt(ex.targetReps) || 8,
-          sets: ex.sets,
-        })),
-      };
+  const logSet = useCallback(
+    async (exIdx: number, setIdx: number) => {
+      if (!workout || !logId) return;
+      const ex = workout.exercises[exIdx];
+      const set = ex.loggedSets[setIdx];
 
-      const res = await fetch('/api/workouts/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      const res = await fetch("/api/workouts/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "log_set",
+          logId,
+          exerciseId: ex.exerciseId,
+          setNumber: set.setNumber,
+          weight: set.weight,
+          reps: set.reps,
+          rpe: set.rpe,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.isPR) {
+        setPrType(data.prType || null);
+        setShowPR(true);
+      }
+
+      updateSet(exIdx, setIdx, { logged: true, isPR: data.isPR });
+
+      // Start rest timer
+      setTimerSeconds(ex.restSeconds || 120);
+      setShowTimer(true);
+    },
+    [workout, logId]
+  );
+
+  const completeWorkout = async () => {
+    if (!logId) return;
+    setCompleting(true);
+    try {
+      const res = await fetch("/api/workouts/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete", logId }),
       });
       const data = await res.json();
-      setProgressionResults(data.progressionUpdates || []);
-      setWorkoutComplete(true);
-    } catch (e) {
-      console.error('Save error:', e);
+      setCompletionData({ duration: data.duration, totalVolume: data.totalVolume });
+      setDone(true);
     } finally {
-      setSaving(false);
+      setCompleting(false);
     }
   };
 
+  // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-neutral-500">Loading workout...</div>
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#0066FF] border-t-transparent rounded-full animate-spin" />
       </main>
     );
   }
 
-  if (!session) {
+  if (!workout) {
     return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-neutral-500">Workout not found</p>
-          <button onClick={() => router.push('/dashboard')} className="mt-4 underline">
+      <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <div className="text-center space-y-4">
+          <p className="text-neutral-400">Workout not found</p>
+          <button onClick={() => router.push("/dashboard")} className="text-[#0066FF] underline">
             Back to Dashboard
           </button>
         </div>
@@ -157,26 +368,40 @@ export default function WorkoutPage() {
     );
   }
 
-  if (workoutComplete) {
+  // ── Done Screen ──────────────────────────────────────────────────────────────
+  if (done && completionData) {
+    const totalSets = workout.exercises.reduce((s, ex) => s + ex.loggedSets.filter(l => l.logged).length, 0);
     return (
       <main className="min-h-screen bg-black text-white p-6 flex items-center justify-center">
-        <div className="max-w-md w-full text-center space-y-6">
-          <div className="text-5xl">💪</div>
-          <h1 className="text-2xl font-semibold">Workout Complete</h1>
-          {progressionResults.length > 0 && (
-            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-left">
-              <h3 className="text-sm font-medium text-neutral-400 mb-3">Progression Updates</h3>
-              {progressionResults.map((p, i) => (
-                <div key={i} className="text-sm py-2 border-b border-neutral-800 last:border-0">
-                  <div className="font-medium">{p.exercise}</div>
-                  <div className="text-neutral-500 text-xs mt-1">{p.message}</div>
-                </div>
-              ))}
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <div className="text-6xl">💪</div>
+          <div>
+            <h1 className="text-3xl font-bold">Crushed it!</h1>
+            <p className="text-neutral-400 mt-1">{workout.name}</p>
+          </div>
+
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl p-5 grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-2xl font-bold">{completionData.duration}</div>
+              <div className="text-xs text-neutral-500 mt-1">minutes</div>
             </div>
-          )}
+            <div>
+              <div className="text-2xl font-bold">{totalSets}</div>
+              <div className="text-xs text-neutral-500 mt-1">sets</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold">
+                {completionData.totalVolume >= 1000
+                  ? `${(completionData.totalVolume / 1000).toFixed(1)}k`
+                  : Math.round(completionData.totalVolume)}
+              </div>
+              <div className="text-xs text-neutral-500 mt-1">lbs volume</div>
+            </div>
+          </div>
+
           <button
-            onClick={() => router.push('/dashboard')}
-            className="w-full py-4 bg-white text-black font-semibold rounded-xl"
+            onClick={() => router.push("/dashboard")}
+            className="w-full py-4 bg-[#0066FF] text-white font-bold rounded-xl hover:bg-[#0052CC] transition-colors"
           >
             Back to Dashboard
           </button>
@@ -185,154 +410,287 @@ export default function WorkoutPage() {
     );
   }
 
-  const isCardio = session.exercises.length === 0;
-  const exercise = session.exercises[currentExercise];
+  // ── Active Workout ──────────────────────────────────────────────────────────
+  const completedExercises = workout.exercises.filter(ex =>
+    ex.loggedSets.every(s => s.logged)
+  ).length;
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="min-h-screen bg-black text-white pb-6">
+      {/* Overlays */}
+      {showTimer && (
+        <RestTimer
+          seconds={timerSeconds}
+          onDone={() => setShowTimer(false)}
+        />
+      )}
+      {showPR && <PRCelebration prType={prType} onDone={() => { setShowPR(false); setPrType(null); }} />}
+      {showPlateCalc && (
+        <PlateCalculatorModal
+          weight={plateCalcWeight}
+          onClose={() => setShowPlateCalc(false)}
+        />
+      )}
+
       {/* Header */}
-      <header className="p-4 border-b border-neutral-900 flex items-center justify-between">
-        <button onClick={() => router.push('/dashboard')} className="text-neutral-500">
+      <header className="px-5 pt-6 pb-4 flex items-center justify-between border-b border-[#1a1a1a]">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="text-neutral-500 text-sm hover:text-white transition-colors"
+        >
           ← Exit
         </button>
-        <div className="text-sm font-medium">
-          {SESSION_NAMES[session.sessionType] || session.sessionType}
+        <div className="text-center">
+          <div className="font-bold">{workout.name}</div>
+          <div className="text-xs text-neutral-500">
+            {completedExercises}/{workout.exercises.length} exercises
+          </div>
         </div>
-        <div className="w-12" />
+        <div className="text-xs text-neutral-500 tabular-nums">
+          <ElapsedTime startTime={startTime.current} />
+        </div>
       </header>
 
-      {isCardio ? (
-        /* Cardio Workout */
-        <div className="p-6 space-y-6">
-          <div className="text-center">
-            <h2 className="text-xl font-semibold">{session.cardioType} {SESSION_NAMES[session.sessionType]}</h2>
-            {session.notes && <p className="text-sm text-neutral-500 mt-2">{session.notes}</p>}
-          </div>
+      {/* Progress dots */}
+      <div className="px-5 py-3 flex gap-1.5">
+        {workout.exercises.map((ex, i) => (
+          <div
+            key={ex.id}
+            className={`h-1 flex-1 rounded-full transition-colors ${
+              ex.loggedSets.every(s => s.logged)
+                ? "bg-[#0066FF]"
+                : activeExIdx === i
+                ? "bg-[#0066FF]/50"
+                : "bg-[#262626]"
+            }`}
+          />
+        ))}
+      </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-neutral-400">Duration (min)</label>
-              <input
-                type="number"
-                value={cardioDuration}
-                onChange={e => setCardioDuration(parseInt(e.target.value) || 0)}
-                className="mt-2 w-full p-4 bg-neutral-900 border border-neutral-800 rounded-xl text-center text-2xl"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-neutral-400">Distance (mi)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={cardioDistance}
-                onChange={e => setCardioDistance(parseFloat(e.target.value) || 0)}
-                className="mt-2 w-full p-4 bg-neutral-900 border border-neutral-800 rounded-xl text-center text-2xl"
-              />
-            </div>
-          </div>
+      {/* Exercise List */}
+      <div className="px-5 space-y-3">
+        {workout.exercises.map((ex, exIdx) => {
+          const isActive = activeExIdx === exIdx;
+          const isComplete = ex.loggedSets.every(s => s.logged);
+          const completedSets = ex.loggedSets.filter(s => s.logged).length;
 
-          <button
-            onClick={finishWorkout}
-            disabled={saving}
-            className="w-full py-4 bg-white text-black font-semibold rounded-xl"
-          >
-            {saving ? 'Saving...' : 'Complete Workout'}
-          </button>
-        </div>
-      ) : (
-        /* Strength Workout */
-        <div className="p-6">
-          {/* Exercise Progress */}
-          <div className="flex gap-1 mb-6">
-            {session.exercises.map((_, i) => (
-              <div
-                key={i}
-                className={`h-1 flex-1 rounded-full ${i <= currentExercise ? 'bg-white' : 'bg-neutral-800'}`}
-              />
-            ))}
-          </div>
-
-          {/* Current Exercise */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold">{exercise.exerciseName}</h2>
-            <p className="text-sm text-neutral-500 mt-1">
-              {exercise.targetSets} sets × {exercise.targetReps} reps
-            </p>
-            {exercise.notes && <p className="text-xs text-neutral-600 mt-2">{exercise.notes}</p>}
-          </div>
-
-          {/* Sets */}
-          <div className="space-y-3 mb-6">
-            {exercise.sets.map((set, setIdx) => (
-              <div
-                key={setIdx}
-                className={`p-4 rounded-xl border ${set.completed ? 'bg-neutral-800 border-neutral-700' : 'bg-neutral-900 border-neutral-800'}`}
+          return (
+            <div
+              key={ex.id}
+              className={`rounded-2xl border overflow-hidden transition-all ${
+                isActive
+                  ? "border-[#0066FF]/50 bg-[#141414]"
+                  : isComplete
+                  ? "border-[#262626] bg-[#0a0a0a] opacity-75"
+                  : "border-[#262626] bg-[#141414]"
+              }`}
+            >
+              {/* Exercise Header */}
+              <button
+                className="w-full px-5 py-4 flex items-center justify-between text-left"
+                onClick={() => setActiveExIdx(isActive ? null : exIdx)}
               >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-neutral-500">Set {set.setNumber}</span>
-                  {set.completed && <span className="text-xs text-green-500">✓ Done</span>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-neutral-500">Weight</label>
-                    <input
-                      type="number"
-                      value={set.actualWeight}
-                      onChange={e => updateSet(currentExercise, setIdx, { actualWeight: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-2 mt-1 bg-neutral-800 border border-neutral-700 rounded-lg text-center"
-                    />
+                <div className="flex-1 min-w-0 mr-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isComplete && <span className="text-[#00C853] text-sm">✓</span>}
+                    <span className={`font-semibold ${isComplete ? "text-neutral-400" : "text-white"}`}>
+                      {ex.name}
+                    </span>
+                    {ex.progressionBadge && !isComplete && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#0066FF]/20 text-[#0066FF] border border-[#0066FF]/30">
+                        {ex.progressionBadge}
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <label className="text-xs text-neutral-500">Reps</label>
-                    <input
-                      type="number"
-                      value={set.actualReps}
-                      onChange={e => updateSet(currentExercise, setIdx, { actualReps: parseInt(e.target.value) || 0 })}
-                      className="w-full p-2 mt-1 bg-neutral-800 border border-neutral-700 rounded-lg text-center"
-                    />
+                  <div className="text-xs text-neutral-500 mt-0.5">
+                    {ex.sets} sets × {ex.repsMin}–{ex.repsMax} reps
+                    {ex.rpe ? ` @ RPE ${ex.rpe}` : ""}
+                    {ex.lastWeight ? ` • Last: ${ex.lastWeight} lbs` : ""}
                   </div>
                 </div>
-                {!set.completed && (
-                  <button
-                    onClick={() => updateSet(currentExercise, setIdx, { completed: true })}
-                    className="w-full mt-3 py-2 bg-white text-black text-sm font-semibold rounded-lg"
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-neutral-600">
+                    {completedSets}/{ex.sets}
+                  </span>
+                  <svg
+                    className={`w-4 h-4 text-neutral-600 transition-transform ${isActive ? "rotate-180" : ""}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
                   >
-                    Complete Set
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
 
-          {/* Navigation */}
-          <div className="flex gap-3">
-            {currentExercise > 0 && (
-              <button
-                onClick={() => setCurrentExercise(currentExercise - 1)}
-                className="flex-1 py-4 border border-neutral-800 rounded-xl"
-              >
-                Previous
-              </button>
-            )}
-            {currentExercise < session.exercises.length - 1 ? (
-              <button
-                onClick={() => setCurrentExercise(currentExercise + 1)}
-                className="flex-1 py-4 bg-white text-black font-semibold rounded-xl"
-              >
-                Next Exercise
-              </button>
-            ) : (
-              <button
-                onClick={finishWorkout}
-                disabled={saving}
-                className="flex-1 py-4 bg-white text-black font-semibold rounded-xl"
-              >
-                {saving ? 'Saving...' : 'Finish Workout'}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+              {/* Expanded exercise panel */}
+              {isActive && (
+                <div className="px-5 pb-5 space-y-3 border-t border-[#1a1a1a]">
+                  {/* Progression tip */}
+                  {ex.progressionReason && (
+                    <div className="pt-3">
+                      <p className="text-xs text-[#0066FF]/80 bg-[#0066FF]/10 border border-[#0066FF]/20 rounded-lg px-3 py-2">
+                        {ex.progressionReason}
+                      </p>
+                    </div>
+                  )}
+                  {/* Last session */}
+                  {ex.lastSets.length > 0 && (
+                    <div className="pt-3">
+                      <p className="text-xs text-neutral-600 mb-1.5">Last session:</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {ex.lastSets.map((s, i) => (
+                          <span key={i} className="text-xs bg-[#0a0a0a] border border-[#262626] px-2 py-1 rounded-lg text-neutral-400">
+                            {s.weight}×{s.reps}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sets */}
+                  <div className="pt-2 space-y-2">
+                    {ex.loggedSets.map((set, setIdx) => (
+                      <div
+                        key={setIdx}
+                        className={`p-3 rounded-xl border ${
+                          set.logged
+                            ? "bg-[#0066FF]/10 border-[#0066FF]/30"
+                            : "bg-[#0a0a0a] border-[#262626]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-neutral-500 w-10">
+                            {set.logged ? "✓" : `Set ${set.setNumber}`}
+                          </span>
+
+                          {/* Weight */}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  updateSet(exIdx, setIdx, { weight: Math.max(0, set.weight - 2.5) });
+                                }}
+                                className="w-8 h-8 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-neutral-400 hover:text-white"
+                              >−</button>
+                              <input
+                                type="number"
+                                value={set.weight}
+                                onChange={e =>
+                                  updateSet(exIdx, setIdx, { weight: parseFloat(e.target.value) || 0 })
+                                }
+                                onClick={() => {
+                                  setPlateCalcWeight(set.weight);
+                                }}
+                                className="flex-1 bg-transparent text-center font-bold text-lg focus:outline-none w-16"
+                                step={2.5}
+                              />
+                              <button
+                                onClick={() => updateSet(exIdx, setIdx, { weight: set.weight + 2.5 })}
+                                className="w-8 h-8 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-neutral-400 hover:text-white"
+                              >+</button>
+                            </div>
+                            <div className="text-center text-xs text-neutral-600">lbs</div>
+                          </div>
+
+                          <span className="text-neutral-600">×</span>
+
+                          {/* Reps */}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => updateSet(exIdx, setIdx, { reps: Math.max(1, set.reps - 1) })}
+                                className="w-8 h-8 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-neutral-400 hover:text-white"
+                              >−</button>
+                              <input
+                                type="number"
+                                value={set.reps}
+                                onChange={e =>
+                                  updateSet(exIdx, setIdx, { reps: parseInt(e.target.value) || 0 })
+                                }
+                                className="flex-1 bg-transparent text-center font-bold text-lg focus:outline-none w-16"
+                              />
+                              <button
+                                onClick={() => updateSet(exIdx, setIdx, { reps: set.reps + 1 })}
+                                className="w-8 h-8 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-neutral-400 hover:text-white"
+                              >+</button>
+                            </div>
+                            <div className="text-center text-xs text-neutral-600">reps</div>
+                          </div>
+
+                          {/* Log button */}
+                          {!set.logged && (
+                            <button
+                              onClick={() => logSet(exIdx, setIdx)}
+                              className="w-10 h-10 rounded-xl bg-[#0066FF] flex items-center justify-center text-white font-bold text-lg hover:bg-[#0052CC] transition-colors"
+                            >
+                              ✓
+                            </button>
+                          )}
+                          {set.isPR && (
+                            <span className="text-[#FFB300] text-xs font-bold">PR!</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Tools */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setPlateCalcWeight(ex.loggedSets[0]?.weight || 135);
+                        setShowPlateCalc(true);
+                      }}
+                      className="flex-1 py-2.5 bg-[#0a0a0a] border border-[#262626] rounded-xl text-xs text-neutral-400 hover:text-white transition-colors"
+                    >
+                      🔢 Plate Calc
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTimerSeconds(ex.restSeconds || 120);
+                        setShowTimer(true);
+                      }}
+                      className="flex-1 py-2.5 bg-[#0a0a0a] border border-[#262626] rounded-xl text-xs text-neutral-400 hover:text-white transition-colors"
+                    >
+                      ⏱ Rest Timer
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Complete Workout Button */}
+      <div className="px-5 mt-6">
+        <button
+          onClick={completeWorkout}
+          disabled={completing}
+          className={`w-full py-4 font-bold rounded-xl transition-all ${
+            completing
+              ? "bg-neutral-800 text-neutral-500 cursor-not-allowed"
+              : "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+          }`}
+        >
+          {completing ? "Saving..." : "Complete Workout"}
+        </button>
+      </div>
     </main>
   );
+}
+
+// Elapsed time display
+function ElapsedTime({ startTime }: { startTime: number }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  return <>{mins}:{secs.toString().padStart(2, "0")}</>;
 }

@@ -1,41 +1,36 @@
-import { auth } from "./auth";
+import { getSession } from "./auth";
 import { prisma } from "./prisma";
 
-/**
- * Get the current authenticated user from the session.
- * Returns null if not authenticated.
- */
 export async function getCurrentUser() {
-  const session = await auth();
-  
-  if (!session?.user?.id) {
-    return null;
-  }
-  
+  const session = await getSession();
+  if (!session?.userId) return null;
+
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: session.userId },
     include: {
       profile: true,
-      trainingPlan: true,
-      nutritionPlan: true,
+      subscription: true,
+      streak: true,
     },
   });
-  
+
   return user;
 }
 
-/**
- * Get just the user ID from session (faster, no DB call)
- */
-export async function getCurrentUserId() {
-  const session = await auth();
-  return session?.user?.id ?? null;
+export async function getCurrentUserId(): Promise<string | null> {
+  const session = await getSession();
+  return session?.userId ?? null;
 }
 
-/**
- * Check if user has completed onboarding
- */
-export async function hasCompletedOnboarding() {
-  const user = await getCurrentUser();
-  return user?.onboardingDone ?? false;
+export async function requireAuth(): Promise<string> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    throw new Error("UNAUTHORIZED");
+  }
+  return userId;
+}
+
+export async function hasCompletedOnboarding(): Promise<boolean> {
+  const session = await getSession();
+  return session?.onboardingDone ?? false;
 }

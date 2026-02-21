@@ -1,114 +1,170 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { getSuggestedWeight } from "@/lib/progression";
+import { getProgressionSuggestions } from "@/lib/ai/progressionEngine";
 
-// Map day of week number to our day keys
-const dayMap: Record<number, string> = {
-  0: 'sun',
-  1: 'mon',
-  2: 'tue',
-  3: 'wed',
-  4: 'thu',
-  5: 'fri',
-  6: 'sat',
-};
+export const dynamic = "force-dynamic";
 
+// Day of week order (0=Sun, 1=Mon, ..., 6=Sat)
+// Map to workout order in plan (cycling through workouts)
 export async function GET() {
   try {
-    const user = await getCurrentUser();
-    const targetUser = user || await prisma.user.findFirst();
-    
-    if (!targetUser) {
-      return NextResponse.json({ error: "No user found" }, { status: 401 });
-    }
-    
-    // Get user's training plan
+    const userId = await getCurrentUserId();
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const plan = await prisma.trainingPlan.findUnique({
-      where: { userId: targetUser.id },
+      where: { userId },
       include: {
-        weeks: {
-          where: { weekNumber: { lte: 4 } }, // Get first 4 weeks for now
+        workouts: {
+          orderBy: { order: "asc" },
           include: {
-            sessions: {
-              include: {
-                exercises: {
-                  orderBy: { exerciseOrder: 'asc' },
-                },
-              },
+            exercises: {
+              orderBy: { order: "asc" },
+              include: { exercise: true },
             },
           },
-          orderBy: { weekNumber: 'asc' },
         },
       },
     });
-    
+
     if (!plan) {
-      return NextResponse.json({ error: "No plan found", needsOnboarding: true }, { status: 404 });
+      return NextResponse.json({ needsOnboarding: true, error: "No plan found" }, { status: 404 });
     }
-    
-    // Get today's day of week
+
     const today = new Date();
-    const todayKey = dayMap[today.getDay()];
-    const currentWeek = plan.currentWeek;
-    
-    // Find today's sessions
-    const weekData = plan.weeks.find(w => w.weekNumber === currentWeek);
-    if (!weekData) {
-      return NextResponse.json({ error: "Week not found" }, { status: 404 });
-    }
-    
-    const todaySessions = weekData.sessions.filter(s => s.dayOfWeek === todayKey);
-    
-    // If no sessions today, it's a rest day
-    if (todaySessions.length === 0) {
+    const dayOfWeek = today.getDay(); // 0=Sun
+
+    // Determine which workout to show today based on a cycle
+    // We cycle through workouts based on the day of week and plan start date
+    const daysSinceStart = Math.floor(
+      (today.getTime() - plan.startedAt.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Count training days this week (Mon-Sun)
+    const mondayOfWeek = new Date(today);
+    mondayOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    mondayOfWeek.setHours(0, 0, 0, 0);
+
+    // Check if we already did a workout today
+    const todayStart = new Date(today);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todaysLogs = await prisma.workoutLog.findMany({
+      where: {
+        userId,
+        startedAt: { gte: todayStart, lte: todayEnd },
+      },
+    });
+
+    // Get how many workouts completed this week
+    const weekLogs = await prisma.workoutLog.findMany({
+      where: {
+        userId,
+        startedAt: { gte: mondayOfWeek },
+        completedAt: { not: null },
+      },
+      orderBy: { startedAt: "asc" },
+    });
+
+    const workoutsThisWeek = weekLogs.length;
+    const workoutIndex = workoutsThisWeek % plan.workouts.length;
+    const todayWorkout = plan.workouts[workoutIndex];
+
+    // Check if rest day: hit weekly goal, or already completed a workout today
+    const isRestDay =
+      workoutsThisWeek >= plan.daysPerWeek ||
+      todaysLogs.some(l => l.completedAt !== null);
+
+    if (isRestDay && !todaysLogs.some(l => l.completedAt === null)) {
       return NextResponse.json({
         isRestDay: true,
-        dayOfWeek: todayKey,
-        currentWeek,
-        message: "Rest day. Recover well.",
+        currentWeek: plan.currentWeek,
+        workoutsThisWeek,
+        daysPerWeek: plan.daysPerWeek,
+        message: workoutsThisWeek >= plan.daysPerWeek
+          ? "Weekly goal hit! Rest and recover."
+          : "Rest day. Your muscles grow when you rest.",
       });
     }
-    
-    // Enhance exercises with suggested weights from progression history
-    const enhancedSessions = await Promise.all(
-      todaySessions.map(async (session) => {
-        if (session.exercises.length === 0) {
-          // Cardio session
-          return session;
-        }
-        
-        // Strength session - get suggested weights
-        const exercisesWithWeights = await Promise.all(
-          session.exercises.map(async (exercise) => {
-            const suggestedWeight = await getSuggestedWeight(
-              targetUser.id,
-              exercise.exerciseName,
-              exercise.targetWeight || 45
-            );
-            return {
-              ...exercise,
-              suggestedWeight,
-            };
-          })
-        );
-        
+
+    // Get user profile for unit system
+    const profile = await prisma.profile.findUnique({ where: { userId } });
+    const unitSystem = profile?.unitSystem || "imperial";
+
+    // Get progression suggestions for all exercises
+    const exerciseInputs = todayWorkout.exercises.map(we => ({
+      exerciseId: we.exerciseId,
+      name: we.exercise.name,
+      sets: we.sets,
+      repsMin: we.repsMin,
+      repsMax: we.repsMax,
+      muscleGroups: JSON.parse(we.exercise.muscleGroups || "[]"),
+    }));
+
+    const progressionMap = await getProgressionSuggestions(
+      userId,
+      exerciseInputs,
+      plan.currentWeek,
+      plan.deloadFrequency,
+      unitSystem
+    );
+
+    // Enhance exercises with previous performance data + progression
+    const enhancedExercises = await Promise.all(
+      todayWorkout.exercises.map(async (we) => {
+        // Find last logged set for this exercise
+        const lastLog = await prisma.exerciseLog.findFirst({
+          where: {
+            exerciseId: we.exerciseId,
+            workoutLog: { userId },
+          },
+          orderBy: { createdAt: "desc" },
+          include: {
+            sets: { orderBy: { setNumber: "asc" } },
+          },
+        });
+
+        const lastWeight = lastLog?.sets[0]?.weight || null;
+        const lastSets = lastLog?.sets?.map(s => ({ reps: s.reps, weight: s.weight })) || [];
+
+        const progression = progressionMap.get(we.exerciseId);
+
         return {
-          ...session,
-          exercises: exercisesWithWeights,
+          id: we.id,
+          exerciseId: we.exerciseId,
+          name: we.exercise.name,
+          sets: we.sets,
+          repsMin: we.repsMin,
+          repsMax: we.repsMax,
+          rpe: we.rpe,
+          restSeconds: we.restSeconds,
+          muscleGroups: JSON.parse(we.exercise.muscleGroups || "[]"),
+          lastWeight,
+          lastSets,
+          suggestedWeight: progression?.suggestedWeight || lastWeight || null,
+          progressionBadge: progression?.badge || null,
+          progressionReason: progression?.reason || null,
         };
       })
     );
-    
+
     return NextResponse.json({
       isRestDay: false,
-      dayOfWeek: todayKey,
-      currentWeek,
-      isDeload: weekData.isDeload,
-      sessions: enhancedSessions,
+      currentWeek: plan.currentWeek,
+      workoutsThisWeek,
+      daysPerWeek: plan.daysPerWeek,
+      workout: {
+        id: todayWorkout.id,
+        name: todayWorkout.name,
+        order: todayWorkout.order,
+        exercises: enhancedExercises,
+      },
+      inProgressLog: todaysLogs.find(l => l.completedAt === null)?.id || null,
     });
-  } catch (error) {
-    console.error('Today workout fetch error:', error);
-    return NextResponse.json({ error: "Failed to fetch today's workout" }, { status: 500 });
+  } catch (err) {
+    console.error("Today workout error:", err);
+    return NextResponse.json({ error: "Failed to load workout" }, { status: 500 });
   }
 }
