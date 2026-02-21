@@ -87,7 +87,7 @@ export default function Dashboard() {
     async function fetchData() {
       try {
         // Fetch today's workout
-        const todayRes = await fetch('/api/workout/today');
+        const todayRes = await fetch('/api/workouts/today');
         const todayData = await todayRes.json();
         
         if (todayData.needsOnboarding) {

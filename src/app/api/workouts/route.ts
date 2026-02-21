@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const user = await prisma.user.findFirst();
-  const items = user ? await prisma.workout.findMany({ where: { userId: user.id }, orderBy: { date: "desc" }, take: 20 }) : [];
+  const items = user ? await prisma.workoutLog.findMany({ where: { userId: user.id }, orderBy: { date: "desc" }, take: 20 }) : [];
   return NextResponse.json({ items });
 }
 
@@ -11,8 +11,8 @@ export async function POST(req: NextRequest) {
   const user = await prisma.user.findFirst();
   if (!user) return NextResponse.json({ error: "No user" }, { status: 401 });
   const data = await req.json();
-  const created = await prisma.workout.create({
-    data: { userId: user.id, type: data.type ?? "custom", details: data.details ?? {} }
+  const created = await prisma.workoutLog.create({
+    data: { userId: user.id, sessionType: data.type ?? "custom" }
   });
   return NextResponse.json({ ok: true, id: created.id });
 }
