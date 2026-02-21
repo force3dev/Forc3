@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String?
+  hashedPassword  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  onboardingDone  Boolean  @default(false)
+  
+  profile         Profile?
+  trainingPlan    TrainingPlan?
+  nutritionPlan   NutritionPlan?
+  workoutLogs     WorkoutLog[]
+  mealLogs        MealLog[]
+  progressions    ExerciseProgression[]
+  weeklyWeights   WeeklyWeight[]
+}
+
+model Profile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  age             Int?
+  heightCm        Float?
+  weightKg        Float?
+  unitSystem      String   @default("imperial")
+  goal            String?
+  experience      String?
+  trainingDays    String?
+  sports          String?
+  eventType       String?
+  eventDate       DateTime?
+  injuries        String?
+  injuryNotes     String?
+  tdee            Int?
+  bmr             Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model TrainingPlan {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String?
+  description     String?
+  startDate       DateTime @default(now())
+  currentWeek     Int      @default(1)
+  totalWeeks      Int      @default(4)
+  splitType       String?
+  daysPerWeek     Int      @default(4)
+  weeks           PlanWeek[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model PlanWeek {
+  id              String   @id @default(cuid())
+  planId          String
+  plan            TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  weekNumber      Int
+  isDeload        Boolean  @default(false)
+  notes           String?
+  sessions        PlannedSession[]
+  @@unique([planId, weekNumber])
+}
+
+model PlannedSession {
+  id              String   @id @default(cuid())
+  weekId          String
+  week            PlanWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  dayOfWeek       String
+  sessionType     String
+  sessionOrder    Int      @default(1)
+  exercises       PlannedExercise[]
+  cardioType      String?
+  targetDuration  Int?
+  targetDistance  Float?
+  targetPace      String?
+  intervals       String?
+  notes           String?
+  @@index([weekId, dayOfWeek])
+}
+
+model PlannedExercise {
+  id              String   @id @default(cuid())
+  sessionId       String
+  session         PlannedSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exerciseName    String
+  exerciseOrder   Int
+  targetSets      Int
+  targetReps      String
+  targetWeight    Float?
+  targetRPE       Int?
+  restSeconds     Int      @default(90)
+  notes           String?
+  @@index([sessionId])
+}
+
+model WorkoutLog {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plannedSessionId String?
+  date            DateTime @default(now())
+  sessionType     String
+  status          String   @default("completed")
+  actualDuration  Int?
+  actualDistance  Float?
+  actualPace      String?
+  avgHeartRate    Int?
+  perceivedEffort Int?
+  notes           String?
+  exerciseLogs    ExerciseLog[]
+  createdAt       DateTime @default(now())
+  @@index([userId, date])
+}
+
+model ExerciseLog {
+  id              String   @id @default(cuid())
+  workoutLogId    String
+  workoutLog      WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  exerciseName    String
+  exerciseOrder   Int
+  sets            SetLog[]
+  notes           String?
+}
+
+model SetLog {
+  id              String   @id @default(cuid())
+  exerciseLogId   String
+  exerciseLog     ExerciseLog @relation(fields: [exerciseLogId], references: [id], onDelete: Cascade)
+  setNumber       Int
+  targetReps      Int?
+  actualReps      Int
+  targetWeight    Float?
+  actualWeight    Float
+  rpe             Int?
+  completed       Boolean  @default(true)
+  @@index([exerciseLogId])
+}
+
+model ExerciseProgression {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exerciseName    String
+  currentWeight   Float
+  lastWeight      Float?
+  consecutiveSuccesses Int @default(0)
+  consecutiveFailures  Int @default(0)
+  lastPerformed   DateTime?
+  totalSessions   Int      @default(0)
+  weeklyMileage   Float?
+  longestRun      Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([userId, exerciseName])
+}
+
+model NutritionPlan {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalMode        String   @default("maintenance")
+  restDayCalories Int
+  restDayProtein  Int
+  restDayCarbs    Int
+  restDayFat      Int
+  trainingDayCalories Int
+  trainingDayProtein  Int
+  trainingDayCarbs    Int
+  trainingDayFat      Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model MealLog {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime @default(now())
+  mealName        String?
+  description     String?
+  calories        Int
+  proteinG        Int?
+  carbsG          Int?
+  fatG            Int?
+  createdAt       DateTime @default(now())
+  @@index([userId, date])
+}
+
+model WeeklyWeight {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime @default(now())
+  weightKg        Float
+  notes           String?
+  @@index([userId, date])
+}
