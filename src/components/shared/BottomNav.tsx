@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSwipe } from "@/hooks/useSwipe";
 
-type Tab = "home" | "workout" | "nutrition" | "progress" | "coach" | "profile";
+type Tab = "home" | "discover" | "workout" | "coach" | "profile";
 
 interface Props {
   active: Tab;
@@ -13,7 +13,7 @@ const tabs: { id: Tab; label: string; href: string; icon: React.ReactNode }[] = 
   {
     id: "home",
     label: "Home",
-    href: "/dashboard",
+    href: "/home",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -22,13 +22,24 @@ const tabs: { id: Tab; label: string; href: string; icon: React.ReactNode }[] = 
     ),
   },
   {
-    id: "nutrition",
-    label: "Nutrition",
-    href: "/nutrition",
+    id: "discover",
+    label: "Discover",
+    href: "/discover",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+    ),
+  },
+  {
+    id: "workout",
+    label: "Workout",
+    href: "/workout",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M3 6h2m0 0V4m0 2v2M3 6h18m-2 0V4m0 2v2m0-2h2M5 8h14m-7 4v4m0-4H9m3 0h3" />
       </svg>
     ),
   },
@@ -40,17 +51,6 @@ const tabs: { id: Tab; label: string; href: string; icon: React.ReactNode }[] = 
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-      </svg>
-    ),
-  },
-  {
-    id: "progress",
-    label: "Progress",
-    href: "/progress",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
       </svg>
     ),
   },
@@ -67,7 +67,7 @@ const tabs: { id: Tab; label: string; href: string; icon: React.ReactNode }[] = 
   },
 ];
 
-const TAB_ORDER: Tab[] = ["home", "nutrition", "coach", "progress", "profile"];
+const TAB_ORDER: Tab[] = ["home", "discover", "workout", "coach", "profile"];
 
 export default function BottomNav({ active }: Props) {
   const router = useRouter();

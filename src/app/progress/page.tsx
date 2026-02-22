@@ -368,7 +368,7 @@ export default function ProgressPage() {
         </div>
       </div>
 
-      <BottomNav active="progress" />
+      <BottomNav active="profile" />
     </main>
   );
 }

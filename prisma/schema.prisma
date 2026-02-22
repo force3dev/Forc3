@@ -16,6 +16,13 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Social identity
+  username      String?  @unique
+  displayName   String?
+  bio           String?
+  avatarUrl     String?
+  isPrivate     Boolean  @default(false)
+
   profile         Profile?
   subscription    Subscription?
   workoutLogs     WorkoutLog[]
@@ -26,6 +33,21 @@ model User {
   personalRecords PersonalRecord[]
   exerciseAnalytics UserExerciseAnalytics[]
   coachMessages   CoachMessage[]
+
+  // Social relations
+  followers        Follow[]        @relation("Following")
+  following        Follow[]        @relation("Followers")
+  activities       Activity[]
+  sharedWorkouts   SharedWorkout[]
+  likes            Like[]
+  comments         Comment[]
+  blockedUsers     Block[]         @relation("Blocker")
+  blockedBy        Block[]         @relation("Blocked")
+  notifications    Notification[]
+  followRequests   FollowRequest[] @relation("RequestReceiver")
+  sentRequests     FollowRequest[] @relation("RequestSender")
+  cardioActivities CardioActivity[]
+  workoutCopies    WorkoutCopy[]
 }
 
 model Profile {
@@ -101,8 +123,9 @@ model Workout {
   dayOfWeek Int?    // 0-6
   order     Int
 
-  exercises WorkoutExercise[]
-  logs      WorkoutLog[]
+  exercises      WorkoutExercise[]
+  logs           WorkoutLog[]
+  sharedWorkouts SharedWorkout[]
 
   createdAt DateTime @default(now())
 }
@@ -120,6 +143,14 @@ model Exercise {
   avoidIfInjury    String  @default("[]") // JSON array
   instructions     String?
   videoUrl         String?
+
+  // Exercise visuals
+  gifUrl          String?
+  muscleImageUrl  String?
+  formTips        String  @default("[]") // JSON array
+  commonMistakes  String  @default("[]") // JSON array
+  externalId      String?
+  source          String? // exercisedb, musclewiki, custom
 
   workoutExercises WorkoutExercise[]
   exerciseLogs     ExerciseLog[]
@@ -432,4 +463,143 @@ model Subscription {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─── Social Platform ──────────────────────────────────────────────────────────
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  follower    User     @relation("Followers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+}
+
+model FollowRequest {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  sender     User     @relation("RequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("RequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  status     String   @default("pending") // pending, accepted, rejected
+  createdAt  DateTime @default(now())
+
+  @@unique([senderId, receiverId])
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // workout_completed, pr_hit, streak_milestone, started_program
+  data      Json
+  isPublic  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SharedWorkout {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutId   String
+  workout     Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  title       String?
+  description String?
+  isPublic    Boolean  @default(true)
+  likes       Like[]
+  comments    Comment[]
+  copies      WorkoutCopy[]
+  createdAt   DateTime @default(now())
+}
+
+model WorkoutCopy {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedWorkoutId String
+  sharedWorkout   SharedWorkout @relation(fields: [sharedWorkoutId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+}
+
+model Like {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedWorkoutId String
+  sharedWorkout   SharedWorkout @relation(fields: [sharedWorkoutId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@unique([userId, sharedWorkoutId])
+}
+
+model Comment {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedWorkoutId String
+  sharedWorkout   SharedWorkout @relation(fields: [sharedWorkoutId], references: [id], onDelete: Cascade)
+  content         String
+  createdAt       DateTime      @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // new_follower, workout_copied, workout_liked, comment, follow_request
+  data      Json
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  reporterId  String
+  reportedId  String?
+  contentId   String?
+  contentType String   // user, workout, comment
+  reason      String
+  details     String?
+  status      String   @default("pending") // pending, reviewed, resolved
+  createdAt   DateTime @default(now())
+}
+
+// ─── Cardio ───────────────────────────────────────────────────────────────────
+
+model CardioActivity {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String   // running, cycling, swimming, hiit, rowing, jump_rope, elliptical, walking, stair_climber, sports
+  sport        String?
+  duration     Int      // seconds
+  distance     Float?
+  pace         Float?
+  calories     Float?
+  avgHeartRate Int?
+  maxHeartRate Int?
+  routeData    Json?
+  intervals    Json?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
 }

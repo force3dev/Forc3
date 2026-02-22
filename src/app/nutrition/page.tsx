@@ -705,7 +705,7 @@ export default function NutritionPage() {
           )}
         </div>
 
-        <BottomNav active="nutrition" />
+        <BottomNav active="workout" />
       </main>
       </PullToRefreshWrapper>
 

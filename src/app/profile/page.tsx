@@ -7,6 +7,14 @@ import BottomNav from "@/components/shared/BottomNav";
 interface ProfileData {
   id: string;
   email: string;
+  username: string | null;
+  displayName: string | null;
+  bio: string | null;
+  avatarUrl: string | null;
+  isPrivate: boolean;
+  followersCount: number;
+  followingCount: number;
+  workoutsCount: number;
   profile: {
     name?: string;
     age?: number;
@@ -104,17 +112,44 @@ export default function ProfilePage() {
       </header>
 
       <div className="px-6 space-y-4">
-        {/* Account card */}
+        {/* Social Identity Card */}
         <div className="bg-[#141414] border border-[#262626] rounded-2xl p-5">
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-14 h-14 rounded-full bg-[#0066FF]/20 flex items-center justify-center">
-              <span className="text-[#0066FF] font-bold text-xl">
-                {(profile?.name || data?.email || "?")[0].toUpperCase()}
-              </span>
+            <div className="w-16 h-16 rounded-full bg-[#0066FF]/20 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {data?.avatarUrl ? (
+                <img src={data.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[#0066FF] font-bold text-2xl">
+                  {(data?.displayName || profile?.name || data?.email || "?")[0].toUpperCase()}
+                </span>
+              )}
             </div>
-            <div>
-              <div className="font-bold text-lg">{profile?.name || "Athlete"}</div>
-              <div className="text-sm text-neutral-500">{data?.email}</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-lg">{data?.displayName || profile?.name || "Athlete"}</div>
+              {data?.username ? (
+                <div className="text-sm text-neutral-500">@{data.username}</div>
+              ) : (
+                <Link href="/onboarding/username" className="text-xs text-[#0066FF]">Set username →</Link>
+              )}
+              {data?.bio && (
+                <p className="text-xs text-neutral-400 mt-1 truncate">{data.bio}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Social Stats */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
+              <div className="text-xl font-bold">{data?.followersCount ?? 0}</div>
+              <div className="text-[10px] text-neutral-500 mt-0.5">Followers</div>
+            </div>
+            <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
+              <div className="text-xl font-bold">{data?.followingCount ?? 0}</div>
+              <div className="text-[10px] text-neutral-500 mt-0.5">Following</div>
+            </div>
+            <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
+              <div className="text-xl font-bold">{data?.workoutsCount ?? 0}</div>
+              <div className="text-[10px] text-neutral-500 mt-0.5">Workouts</div>
             </div>
           </div>
 
