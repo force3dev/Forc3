@@ -3,6 +3,93 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/shared/BottomNav";
 
+function WorkoutCalendar() {
+  const [workoutDates, setWorkoutDates] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetch("/api/workouts/log?limit=200")
+      .then(r => r.json())
+      .then(d => {
+        const dates = new Set<string>();
+        for (const log of d.logs || []) {
+          dates.add(new Date(log.startedAt).toISOString().slice(0, 10));
+        }
+        setWorkoutDates(dates);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Build 12-week grid ending today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayOfWeek = today.getDay(); // 0=Sun
+
+  // Start from 12 weeks ago, adjusted to Sunday
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - 83 - dayOfWeek); // ~12 weeks back from last Sunday
+
+  const weeks: Date[][] = [];
+  let cur = new Date(startDate);
+  while (cur <= today) {
+    const week: Date[] = [];
+    for (let d = 0; d < 7; d++) {
+      if (new Date(cur) <= today) week.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (week.length) weeks.push(week);
+  }
+
+  const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+
+  return (
+    <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4">
+      <h3 className="font-semibold text-sm mb-3 text-neutral-300">Workout Activity</h3>
+      <div className="overflow-x-auto">
+        <div className="flex gap-1 min-w-max">
+          {/* Day labels */}
+          <div className="flex flex-col gap-1 mr-1">
+            {DAY_LABELS.map((l, i) => (
+              <div key={i} className="w-3 h-3 flex items-center justify-center">
+                <span className="text-[8px] text-neutral-600">{i % 2 === 1 ? l : ""}</span>
+              </div>
+            ))}
+          </div>
+          {weeks.map((week, wi) => (
+            <div key={wi} className="flex flex-col gap-1">
+              {Array.from({ length: 7 }, (_, di) => {
+                const day = week[di];
+                if (!day) return <div key={di} className="w-3 h-3" />;
+                const iso = day.toISOString().slice(0, 10);
+                const hasWorkout = workoutDates.has(iso);
+                const isToday = iso === today.toISOString().slice(0, 10);
+                return (
+                  <div
+                    key={di}
+                    className={`w-3 h-3 rounded-sm ${
+                      hasWorkout
+                        ? "bg-[#0066FF]"
+                        : isToday
+                        ? "bg-[#1a1a1a] border border-[#0066FF]/50"
+                        : "bg-[#1a1a1a]"
+                    }`}
+                    title={`${iso}${hasWorkout ? " — workout" : ""}`}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 mt-3">
+        <div className="w-3 h-3 rounded-sm bg-[#1a1a1a]" />
+        <span className="text-[10px] text-neutral-600">Rest</span>
+        <div className="w-3 h-3 rounded-sm bg-[#0066FF] ml-2" />
+        <span className="text-[10px] text-neutral-600">Workout</span>
+      </div>
+    </div>
+  );
+}
+
 interface PR {
   id: string;
   type: string;
@@ -153,14 +240,14 @@ export default function ProgressPage() {
         </div>
 
         {/* Quick Links */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <button
             onClick={() => router.push("/progress/weekly")}
             className="bg-[#141414] border border-[#262626] rounded-2xl p-4 text-left hover:border-[#0066FF]/50 transition-colors"
           >
             <div className="text-2xl mb-2">📅</div>
-            <div className="font-semibold text-sm">Weekly Report</div>
-            <div className="text-xs text-neutral-500 mt-0.5">Insights & recommendations</div>
+            <div className="font-semibold text-sm">Weekly</div>
+            <div className="text-xs text-neutral-500 mt-0.5">Report</div>
           </button>
           <button
             onClick={() => router.push("/progress/analytics")}
@@ -168,9 +255,20 @@ export default function ProgressPage() {
           >
             <div className="text-2xl mb-2">📊</div>
             <div className="font-semibold text-sm">Analytics</div>
-            <div className="text-xs text-neutral-500 mt-0.5">Volume & strength trends</div>
+            <div className="text-xs text-neutral-500 mt-0.5">Trends</div>
+          </button>
+          <button
+            onClick={() => router.push("/progress/measurements")}
+            className="bg-[#141414] border border-[#262626] rounded-2xl p-4 text-left hover:border-[#0066FF]/50 transition-colors"
+          >
+            <div className="text-2xl mb-2">📏</div>
+            <div className="font-semibold text-sm">Body</div>
+            <div className="text-xs text-neutral-500 mt-0.5">Measurements</div>
           </button>
         </div>
+
+        {/* Workout Calendar Heatmap */}
+        <WorkoutCalendar />
 
         {/* Personal Records */}
         <div>
