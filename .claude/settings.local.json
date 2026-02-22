@@ -5,7 +5,16 @@
       "Bash(cd /c/Users/Geric/Desktop/forc3 && npm install 2>&1)",
       "Bash(cd:*)",
       "Bash(cd /c/Users/Geric/Desktop/forc3 && npx prisma db push 2>&1)",
-      "Bash(cd /c/Users/Geric/Desktop/forc3 && node -e \"const m = require\\('./node_modules/next-auth/react'\\); console.log\\(Object.keys\\(m\\)\\)\" 2>&1)"
+      "Bash(cd /c/Users/Geric/Desktop/forc3 && node -e \"const m = require\\('./node_modules/next-auth/react'\\); console.log\\(Object.keys\\(m\\)\\)\" 2>&1)",
+      "Bash(tail:*)",
+      "Bash(sleep 5:*)",
+      "Bash(head:*)",
+      "Bash(sleep 8:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(cd /c/Users/Geric/Desktop/forc3 && git push origin main 2>&1)",
+      "Bash(vercel:*)"
     ]
   }
 }

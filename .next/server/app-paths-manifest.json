@@ -1,4 +1,23 @@
 {
+  "/api/workouts/today/route": "app/api/workouts/today/route.js",
   "/page": "app/page.js",
-  "/api/auth/login/route": "app/api/auth/login/route.js"
+  "/api/user/profile/route": "app/api/user/profile/route.js",
+  "/home/page": "app/home/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/api/auth/login/route": "app/api/auth/login/route.js",
+  "/discover/page": "app/discover/page.js",
+  "/api/nutrition/route": "app/api/nutrition/route.js",
+  "/api/social/search/route": "app/api/social/search/route.js",
+  "/api/social/feed/route": "app/api/social/feed/route.js",
+  "/coach/page": "app/coach/page.js",
+  "/api/coach/history/route": "app/api/coach/history/route.js",
+  "/api/coach/chat/route": "app/api/coach/chat/route.js",
+  "/workout/cardio/[type]/page": "app/workout/cardio/[type]/page.js",
+  "/workout/page": "app/workout/page.js",
+  "/plan/page": "app/plan/page.js",
+  "/profile/page": "app/profile/page.js",
+  "/api/plan/route": "app/api/plan/route.js",
+  "/api/workouts/log/route": "app/api/workouts/log/route.js",
+  "/settings/page": "app/settings/page.js",
+  "/settings/upgrade/page": "app/settings/upgrade/page.js"
 }
