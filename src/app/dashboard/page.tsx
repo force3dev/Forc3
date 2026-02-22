@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
 import PullToRefreshWrapper from "@/components/shared/PullToRefreshWrapper";
+import WeeklySummaryPopup from "@/components/shared/WeeklySummaryPopup";
 
 interface ExercisePreview {
   id: string;
@@ -91,6 +92,8 @@ export default function DashboardPage() {
     : 0;
 
   return (
+    <>
+    <WeeklySummaryPopup />
     <PullToRefreshWrapper onRefresh={load}>
     <main className="min-h-screen bg-black text-white pb-24">
       {/* Header */}
@@ -234,5 +237,6 @@ export default function DashboardPage() {
       <BottomNav active="home" />
     </main>
     </PullToRefreshWrapper>
+    </>
   );
 }

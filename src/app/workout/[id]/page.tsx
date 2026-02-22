@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { calculatePlates } from "@/lib/calculations/plateCalculator";
+import WorkoutCompleteScreen from "@/components/shared/WorkoutCompleteScreen";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -237,7 +238,12 @@ export default function WorkoutPage() {
   const [prType, setPrType] = useState<"1rm" | "volume" | null>(null);
   const [completing, setCompleting] = useState(false);
   const [done, setDone] = useState(false);
-  const [completionData, setCompletionData] = useState<{ duration: number; totalVolume: number } | null>(null);
+  const [completionData, setCompletionData] = useState<{
+    duration: number;
+    totalVolume: number;
+    prCount: number;
+    newAchievements: { name: string; icon: string; xpReward: number }[];
+  } | null>(null);
 
   const startTime = useRef(Date.now());
 
@@ -340,7 +346,12 @@ export default function WorkoutPage() {
         body: JSON.stringify({ action: "complete", logId }),
       });
       const data = await res.json();
-      setCompletionData({ duration: data.duration, totalVolume: data.totalVolume });
+      setCompletionData({
+        duration: data.duration * 60, // convert minutes to seconds
+        totalVolume: data.totalVolume,
+        prCount: data.prCount || 0,
+        newAchievements: data.newAchievements || [],
+      });
       setDone(true);
     } finally {
       setCompleting(false);
@@ -373,41 +384,14 @@ export default function WorkoutPage() {
   if (done && completionData) {
     const totalSets = workout.exercises.reduce((s, ex) => s + ex.loggedSets.filter(l => l.logged).length, 0);
     return (
-      <main className="min-h-screen bg-black text-white p-6 flex items-center justify-center">
-        <div className="w-full max-w-sm space-y-6 text-center">
-          <div className="text-6xl">💪</div>
-          <div>
-            <h1 className="text-3xl font-bold">Crushed it!</h1>
-            <p className="text-neutral-400 mt-1">{workout.name}</p>
-          </div>
-
-          <div className="bg-[#141414] border border-[#262626] rounded-2xl p-5 grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="text-2xl font-bold">{completionData.duration}</div>
-              <div className="text-xs text-neutral-500 mt-1">minutes</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold">{totalSets}</div>
-              <div className="text-xs text-neutral-500 mt-1">sets</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold">
-                {completionData.totalVolume >= 1000
-                  ? `${(completionData.totalVolume / 1000).toFixed(1)}k`
-                  : Math.round(completionData.totalVolume)}
-              </div>
-              <div className="text-xs text-neutral-500 mt-1">lbs volume</div>
-            </div>
-          </div>
-
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="w-full py-4 bg-[#0066FF] text-white font-bold rounded-xl hover:bg-[#0052CC] transition-colors"
-          >
-            Back to Dashboard
-          </button>
-        </div>
-      </main>
+      <WorkoutCompleteScreen
+        duration={completionData.duration}
+        totalVolume={completionData.totalVolume}
+        totalSets={totalSets}
+        prCount={completionData.prCount}
+        newAchievements={completionData.newAchievements}
+        onClose={() => router.push("/dashboard")}
+      />
     );
   }
 
