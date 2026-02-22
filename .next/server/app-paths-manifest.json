@@ -1,20 +1,7 @@
 {
-  "/page": "app/page.js",
-  "/api/auth/login/route": "app/api/auth/login/route.js",
-  "/api/workouts/today/route": "app/api/workouts/today/route.js",
-  "/api/nutrition/route": "app/api/nutrition/route.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/plan/page": "app/plan/page.js",
-  "/api/user/profile/route": "app/api/user/profile/route.js",
-  "/progress/page": "app/progress/page.js",
-  "/api/workouts/log/route": "app/api/workouts/log/route.js",
-  "/api/progress/prs/route": "app/api/progress/prs/route.js",
-  "/api/plan/route": "app/api/plan/route.js",
-  "/nutrition/page": "app/nutrition/page.js",
-  "/api/achievements/route": "app/api/achievements/route.js",
-  "/progress/analytics/page": "app/progress/analytics/page.js",
   "/progress/weekly/page": "app/progress/weekly/page.js",
-  "/api/progress/analytics/route": "app/api/progress/analytics/route.js",
-  "/api/progress/weekly/route": "app/api/progress/weekly/route.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/progress/analytics/page": "app/progress/analytics/page.js",
+  "/progress/page": "app/progress/page.js",
   "/profile/page": "app/profile/page.js"
 }
