@@ -25,6 +25,7 @@ model User {
   streak          Streak?
   personalRecords PersonalRecord[]
   exerciseAnalytics UserExerciseAnalytics[]
+  coachMessages   CoachMessage[]
 }
 
 model Profile {
@@ -246,6 +247,14 @@ model WeeklyReport {
   strengthTrend  String?
   recoveryScore  Float?
 
+  // AI-generated fields
+  overallScore      Int?
+  motivationalNote  String?
+  focusForNextWeek  String?
+  nutritionAdherence Float?
+  planAdjustments   String @default("[]") // JSON array
+  warnings          String @default("[]") // JSON array
+
   createdAt DateTime @default(now())
 }
 
@@ -303,6 +312,85 @@ model Streak {
   lastWorkoutDate DateTime?
 
   updatedAt DateTime @updatedAt
+}
+
+// ─── AI Coach ────────────────────────────────────────────────────────────────
+
+model CoachMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   // user | coach
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model UserExerciseResponse {
+  id         String   @id @default(cuid())
+  userId     String
+  exerciseId String
+
+  strengthGainRate Float?
+  volumeResponse   Float?
+  recoveryDemand   Float?
+  enjoymentRating  Int?
+  dataPoints       Int      @default(0)
+  lastCalculated   DateTime @default(now())
+
+  @@unique([userId, exerciseId])
+}
+
+// ─── Nutrition Extended ───────────────────────────────────────────────────────
+
+model FavoriteMeal {
+  id        String   @id @default(cuid())
+  userId    String
+
+  name      String
+  calories  Float
+  protein   Float
+  carbs     Float
+  fat       Float
+  items     String?  // JSON array of food items
+
+  timesUsed Int      @default(0)
+  lastUsed  DateTime?
+  createdAt DateTime @default(now())
+}
+
+// ─── Body Tracking ────────────────────────────────────────────────────────────
+
+model BodyMeasurement {
+  id     String @id @default(cuid())
+  userId String
+
+  date      DateTime @default(now())
+  weight    Float?
+  bodyFat   Float?
+  chest     Float?
+  waist     Float?
+  hips      Float?
+  bicepLeft  Float?
+  bicepRight Float?
+  thighLeft  Float?
+  thighRight Float?
+  calfLeft   Float?
+  calfRight  Float?
+  notes     String?
+}
+
+model ProgressPhoto {
+  id       String   @id @default(cuid())
+  userId   String
+
+  imageUrl String
+  date     DateTime @default(now())
+  type     String   // front, side, back
+  notes    String?
+  weight   Float?
+  bodyFat  Float?
 }
 
 // ─── Progression Tracking ─────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getProgressionSuggestions } from "@/lib/ai/progressionEngine";
+import { generateWorkoutNotes } from "@/lib/ai/claude";
 
 export const dynamic = "force-dynamic";
 
@@ -150,6 +151,20 @@ export async function GET() {
       })
     );
 
+    // Generate AI coaching notes (non-blocking — skip if no API key)
+    let coachingNotes: string[] = [];
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        coachingNotes = await generateWorkoutNotes(
+          userId,
+          todayWorkout.name,
+          enhancedExercises.map(e => e.name)
+        );
+      } catch {
+        // Non-critical — don't fail the whole request
+      }
+    }
+
     return NextResponse.json({
       isRestDay: false,
       currentWeek: plan.currentWeek,
@@ -160,6 +175,7 @@ export async function GET() {
         name: todayWorkout.name,
         order: todayWorkout.order,
         exercises: enhancedExercises,
+        coachingNotes,
       },
       inProgressLog: todaysLogs.find(l => l.completedAt === null)?.id || null,
     });

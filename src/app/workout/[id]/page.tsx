@@ -36,6 +36,7 @@ interface WorkoutData {
   id: string;
   name: string;
   exercises: Exercise[];
+  coachingNotes?: string[];
 }
 
 // ─── Rest Timer Component ─────────────────────────────────────────────────────
@@ -264,7 +265,7 @@ export default function WorkoutPage() {
           })),
         }));
 
-        setWorkout({ id: w.id, name: w.name, exercises });
+        setWorkout({ id: w.id, name: w.name, exercises, coachingNotes: w.coachingNotes || [] });
 
         // Start the workout log
         const logRes = await fetch("/api/workouts/log", {
@@ -466,6 +467,16 @@ export default function WorkoutPage() {
           />
         ))}
       </div>
+
+      {/* AI Coaching Notes */}
+      {workout.coachingNotes && workout.coachingNotes.length > 0 && (
+        <div className="mx-5 mb-3 bg-[#0066FF]/5 border border-[#0066FF]/20 rounded-xl p-3 space-y-1.5">
+          <p className="text-xs text-[#0066FF] font-semibold uppercase tracking-wide">Coach Tips</p>
+          {workout.coachingNotes.map((note, i) => (
+            <p key={i} className="text-xs text-neutral-300">{note}</p>
+          ))}
+        </div>
+      )}
 
       {/* Exercise List */}
       <div className="px-5 space-y-3">
