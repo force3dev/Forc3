@@ -214,6 +214,20 @@ export default function ProfilePage() {
         {/* Actions */}
         <div className="bg-[#141414] border border-[#262626] rounded-2xl overflow-hidden">
           <Link
+            href="/settings/profile"
+            className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors"
+          >
+            <span className="text-sm">Edit Profile</span>
+            <span className="text-neutral-500">→</span>
+          </Link>
+          <Link
+            href="/settings"
+            className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors"
+          >
+            <span className="text-sm">Settings</span>
+            <span className="text-neutral-500">→</span>
+          </Link>
+          <Link
             href="/history"
             className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors"
           >
