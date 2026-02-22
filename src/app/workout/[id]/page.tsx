@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { calculatePlates } from "@/lib/calculations/plateCalculator";
 import WorkoutCompleteScreen from "@/components/shared/WorkoutCompleteScreen";
+import { ExerciseDetailModal } from "@/components/workout/ExerciseDetailModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,12 @@ interface Exercise {
   rpe?: number;
   restSeconds: number;
   muscleGroups: string[];
+  gifUrl?: string | null;
+  secondaryMuscles?: string;
+  formTips?: string;
+  commonMistakes?: string;
+  instructions?: string | null;
+  category?: string;
   lastWeight: number | null;
   lastSets: { reps: number; weight: number }[];
   suggestedWeight: number | null;
@@ -238,6 +245,7 @@ export default function WorkoutPage() {
   const [prType, setPrType] = useState<"1rm" | "volume" | null>(null);
   const [completing, setCompleting] = useState(false);
   const [done, setDone] = useState(false);
+  const [demoExercise, setDemoExercise] = useState<Exercise | null>(null);
   const [completionData, setCompletionData] = useState<{
     duration: number;
     totalVolume: number;
@@ -410,6 +418,22 @@ export default function WorkoutPage() {
         />
       )}
       {showPR && <PRCelebration prType={prType} onDone={() => { setShowPR(false); setPrType(null); }} />}
+      {demoExercise && (
+        <ExerciseDetailModal
+          exercise={{
+            id: demoExercise.exerciseId,
+            name: demoExercise.name,
+            gifUrl: demoExercise.gifUrl,
+            muscleGroups: JSON.stringify(demoExercise.muscleGroups),
+            secondaryMuscles: demoExercise.secondaryMuscles || "[]",
+            formTips: demoExercise.formTips || "[]",
+            commonMistakes: demoExercise.commonMistakes || "[]",
+            instructions: demoExercise.instructions,
+            category: demoExercise.category || "strength",
+          }}
+          onClose={() => setDemoExercise(null)}
+        />
+      )}
       {showPlateCalc && (
         <PlateCalculatorModal
           weight={plateCalcWeight}
@@ -481,40 +505,54 @@ export default function WorkoutPage() {
               }`}
             >
               {/* Exercise Header */}
-              <button
-                className="w-full px-5 py-4 flex items-center justify-between text-left"
-                onClick={() => setActiveExIdx(isActive ? null : exIdx)}
-              >
-                <div className="flex-1 min-w-0 mr-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {isComplete && <span className="text-[#00C853] text-sm">✓</span>}
-                    <span className={`font-semibold ${isComplete ? "text-neutral-400" : "text-white"}`}>
-                      {ex.name}
-                    </span>
-                    {ex.progressionBadge && !isComplete && (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#0066FF]/20 text-[#0066FF] border border-[#0066FF]/30">
-                        {ex.progressionBadge}
+              <div className="w-full px-5 py-4 flex items-center gap-3 text-left">
+                {/* GIF Thumbnail */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDemoExercise(ex); }}
+                  className="w-12 h-12 rounded-xl overflow-hidden bg-[#0a0a0a] border border-[#262626] flex-shrink-0 flex items-center justify-center"
+                >
+                  {ex.gifUrl ? (
+                    <img src={ex.gifUrl} alt={ex.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xl">💪</span>
+                  )}
+                </button>
+
+                <button
+                  className="flex-1 flex items-center justify-between text-left min-w-0"
+                  onClick={() => setActiveExIdx(isActive ? null : exIdx)}
+                >
+                  <div className="flex-1 min-w-0 mr-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isComplete && <span className="text-[#00C853] text-sm">✓</span>}
+                      <span className={`font-semibold ${isComplete ? "text-neutral-400" : "text-white"}`}>
+                        {ex.name}
                       </span>
-                    )}
+                      {ex.progressionBadge && !isComplete && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#0066FF]/20 text-[#0066FF] border border-[#0066FF]/30">
+                          {ex.progressionBadge}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-neutral-500 mt-0.5">
+                      {ex.sets} sets × {ex.repsMin}–{ex.repsMax} reps
+                      {ex.rpe ? ` @ RPE ${ex.rpe}` : ""}
+                      {ex.lastWeight ? ` • Last: ${ex.lastWeight} lbs` : ""}
+                    </div>
                   </div>
-                  <div className="text-xs text-neutral-500 mt-0.5">
-                    {ex.sets} sets × {ex.repsMin}–{ex.repsMax} reps
-                    {ex.rpe ? ` @ RPE ${ex.rpe}` : ""}
-                    {ex.lastWeight ? ` • Last: ${ex.lastWeight} lbs` : ""}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-neutral-600">
+                      {completedSets}/{ex.sets}
+                    </span>
+                    <svg
+                      className={`w-4 h-4 text-neutral-600 transition-transform ${isActive ? "rotate-180" : ""}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-neutral-600">
-                    {completedSets}/{ex.sets}
-                  </span>
-                  <svg
-                    className={`w-4 h-4 text-neutral-600 transition-transform ${isActive ? "rotate-180" : ""}`}
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </button>
+                </button>
+              </div>
 
               {/* Expanded exercise panel */}
               {isActive && (

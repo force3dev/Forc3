@@ -1,7 +1,10 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface UserResult {
   id: string;
@@ -23,6 +26,33 @@ interface TrendingWorkout {
   _count: { likes: number; comments: number; copies: number };
 }
 
+interface FeedActivity {
+  id: string;
+  type: string;
+  data: Record<string, any>;
+  createdAt: string;
+  user: {
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function timeAgo(date: string) {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ─── Sub-components ────────────────────────────────────────────────────────────
+
 function Avatar({ user }: { user: { displayName?: string | null; username?: string | null; avatarUrl?: string | null } }) {
   return (
     <div className="w-10 h-10 rounded-full bg-[#0066FF]/20 border border-[#0066FF]/30 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -33,6 +63,99 @@ function Avatar({ user }: { user: { displayName?: string | null; username?: stri
           {(user.displayName || user.username || "?")[0].toUpperCase()}
         </span>
       )}
+    </div>
+  );
+}
+
+function ActivityCard({ activity }: { activity: FeedActivity }) {
+  const router = useRouter();
+  const data = activity.data;
+  const name = activity.user.displayName || activity.user.username || "Someone";
+
+  const content = () => {
+    switch (activity.type) {
+      case "workout_completed":
+        return (
+          <div>
+            <p className="text-sm">
+              <span className="font-semibold">{name}</span>
+              {" "}completed{" "}
+              <span className="text-[#0066FF]">{String(data.workoutName || "a workout")}</span>
+            </p>
+            <div className="flex gap-3 mt-1.5 text-xs text-neutral-500">
+              {data.duration && <span>{String(data.duration)} min</span>}
+              {data.exercises && <span>{String(data.exercises)} exercises</span>}
+              {Number(data.prs) > 0 && (
+                <span className="text-[#FFB300]">🏆 {String(data.prs)} PRs</span>
+              )}
+            </div>
+          </div>
+        );
+      case "pr_hit":
+        return (
+          <div>
+            <p className="text-sm">
+              <span className="font-semibold">{name}</span>
+              {" "}hit a new PR on{" "}
+              <span className="text-[#0066FF]">{String(data.exercise || "")}</span>
+            </p>
+            {data.weight && data.reps && (
+              <p className="text-xl font-bold mt-1">
+                {String(data.weight)} lbs × {String(data.reps)}
+              </p>
+            )}
+          </div>
+        );
+      case "streak_milestone":
+        return (
+          <p className="text-sm">
+            <span className="font-semibold">{name}</span>
+            {" "}reached a{" "}
+            <span className="text-orange-400 font-bold">{String(data.days)} day streak 🔥</span>
+          </p>
+        );
+      case "cardio_completed":
+        return (
+          <div>
+            <p className="text-sm">
+              <span className="font-semibold">{name}</span>
+              {" "}completed a{" "}
+              <span className="text-[#0066FF] capitalize">{String(data.cardioType || "cardio")}</span>
+              {" "}session
+            </p>
+            <div className="flex gap-3 mt-1.5 text-xs text-neutral-500">
+              {data.duration && <span>{Math.round(Number(data.duration) / 60)} min</span>}
+              {data.distance && <span>{Number(data.distance).toFixed(1)} mi</span>}
+              {data.calories && <span>{Math.round(Number(data.calories))} cal</span>}
+            </div>
+          </div>
+        );
+      case "started_program":
+        return (
+          <p className="text-sm">
+            <span className="font-semibold">{name}</span>
+            {" "}started training on FORC3 🚀
+          </p>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const c = content();
+  if (!c) return null;
+
+  return (
+    <div className="px-4 py-4 border-b border-[#1a1a1a]">
+      <div className="flex items-start gap-3">
+        <button onClick={() => activity.user.username && router.push(`/user/${activity.user.username}`)}>
+          <Avatar user={activity.user} />
+        </button>
+        <div className="flex-1 min-w-0">
+          {c}
+          <p className="text-xs text-neutral-600 mt-1.5">{timeAgo(activity.createdAt)}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -91,12 +214,16 @@ function WorkoutCard({ workout }: { workout: TrendingWorkout }) {
   );
 }
 
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function DiscoverPage() {
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<UserResult[]>([]);
   const [trending, setTrending] = useState<TrendingWorkout[]>([]);
   const [popularUsers, setPopularUsers] = useState<UserResult[]>([]);
-  const [activeTab, setActiveTab] = useState<"trending" | "users">("trending");
+  const [feed, setFeed] = useState<FeedActivity[]>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"feed" | "trending" | "users">("feed");
   const [searchLoading, setSearchLoading] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
@@ -106,6 +233,16 @@ export default function DiscoverPage() {
       .then(r => r.json())
       .then(d => setPopularUsers(d.users || []));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "feed" && feed.length === 0) {
+      setFeedLoading(true);
+      fetch("/api/social/feed")
+        .then(r => r.json())
+        .then(d => setFeed(d.activities || []))
+        .finally(() => setFeedLoading(false));
+    }
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = (q: string) => {
     setSearch(q);
@@ -186,7 +323,7 @@ export default function DiscoverPage() {
       ) : (
         <>
           <div className="flex border-b border-[#1a1a1a] mb-4">
-            {(["trending", "users"] as const).map(tab => (
+            {(["feed", "trending", "users"] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -196,12 +333,38 @@ export default function DiscoverPage() {
                     : "text-neutral-500"
                 }`}
               >
-                {tab === "trending" ? "Trending Workouts" : "Popular Athletes"}
+                {tab === "feed" ? "Feed" : tab === "trending" ? "Trending" : "Athletes"}
               </button>
             ))}
           </div>
 
           <div className="px-5">
+            {activeTab === "feed" && (
+              feedLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-[#0066FF] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : feed.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="text-5xl mb-4">🤝</div>
+                  <h2 className="font-bold text-lg mb-2">Your feed is empty</h2>
+                  <p className="text-neutral-500 text-sm mb-6">
+                    Follow other athletes to see their workouts, PRs, and milestones here.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab("users")}
+                    className="px-6 py-3 bg-[#0066FF] text-white rounded-xl font-semibold text-sm"
+                  >
+                    Find People to Follow
+                  </button>
+                </div>
+              ) : (
+                <div className="-mx-5">
+                  {feed.map(a => <ActivityCard key={a.id} activity={a} />)}
+                </div>
+              )
+            )}
+
             {activeTab === "trending" && (
               trending.length === 0 ? (
                 <div className="text-center py-12 text-neutral-500 text-sm">
@@ -215,6 +378,7 @@ export default function DiscoverPage() {
                 </div>
               )
             )}
+
             {activeTab === "users" && (
               <div className="divide-y divide-[#1a1a1a]">
                 {popularUsers.map(u => (

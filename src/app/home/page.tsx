@@ -1,205 +1,276 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
 import PullToRefreshWrapper from "@/components/shared/PullToRefreshWrapper";
+import WeeklySummaryPopup from "@/components/shared/WeeklySummaryPopup";
 
-interface ActivityUser {
+interface ExercisePreview {
   id: string;
-  username: string | null;
-  displayName: string | null;
-  avatarUrl: string | null;
+  exerciseId: string;
+  name: string;
+  sets: number;
+  repsMin: number;
+  repsMax: number;
+  lastWeight: number | null;
 }
 
-interface FeedActivity {
-  id: string;
-  type: string;
-  data: Record<string, any>; // JSON data field
-  createdAt: string;
-  user: ActivityUser;
-}
-
-function timeAgo(date: string) {
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
-function Avatar({ user }: { user: ActivityUser }) {
-  return (
-    <div className="w-10 h-10 rounded-full bg-[#0066FF]/20 border border-[#0066FF]/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
-      {user.avatarUrl ? (
-        <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
-      ) : (
-        <span className="text-[#0066FF] font-bold text-sm">
-          {(user.displayName || user.username || "?")[0].toUpperCase()}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function ActivityCard({ activity }: { activity: FeedActivity }) {
-  const router = useRouter();
-  const data = activity.data;
-  const name = activity.user.displayName || activity.user.username || "Someone";
-  const handle = activity.user.username ? `@${activity.user.username}` : "";
-
-  const content = () => {
-    switch (activity.type) {
-      case "workout_completed":
-        return (
-          <div>
-            <p className="text-sm">
-              <span className="font-semibold">{name}</span>
-              {" "}completed{" "}
-              <span className="text-[#0066FF]">{String(data.workoutName || "a workout")}</span>
-            </p>
-            <div className="flex gap-3 mt-1.5 text-xs text-neutral-500">
-              {data.duration && <span>{String(data.duration)} min</span>}
-              {data.exercises && <span>{String(data.exercises)} exercises</span>}
-              {Number(data.prs) > 0 && (
-                <span className="text-[#FFB300]">🏆 {String(data.prs)} PRs</span>
-              )}
-            </div>
-          </div>
-        );
-      case "pr_hit":
-        return (
-          <div>
-            <p className="text-sm">
-              <span className="font-semibold">{name}</span>
-              {" "}hit a new PR on{" "}
-              <span className="text-[#0066FF]">{String(data.exercise || "")}</span>
-            </p>
-            {data.weight && data.reps && (
-              <p className="text-xl font-bold mt-1">
-                {String(data.weight)} lbs × {String(data.reps)}
-              </p>
-            )}
-          </div>
-        );
-      case "streak_milestone":
-        return (
-          <p className="text-sm">
-            <span className="font-semibold">{name}</span>
-            {" "}reached a{" "}
-            <span className="text-orange-400 font-bold">{String(data.days)} day streak 🔥</span>
-          </p>
-        );
-      case "cardio_completed":
-        return (
-          <div>
-            <p className="text-sm">
-              <span className="font-semibold">{name}</span>
-              {" "}completed a{" "}
-              <span className="text-[#0066FF] capitalize">{String(data.cardioType || "cardio")}</span>
-              {" "}session
-            </p>
-            <div className="flex gap-3 mt-1.5 text-xs text-neutral-500">
-              {data.duration && <span>{Math.round(Number(data.duration) / 60)} min</span>}
-              {data.distance && <span>{Number(data.distance).toFixed(1)} mi</span>}
-              {data.calories && <span>{Math.round(Number(data.calories))} cal</span>}
-            </div>
-          </div>
-        );
-      case "started_program":
-        return (
-          <p className="text-sm">
-            <span className="font-semibold">{name}</span>
-            {" "}started training on FORC3 🚀
-          </p>
-        );
-      default:
-        return null;
-    }
+interface TodayData {
+  isRestDay: boolean;
+  currentWeek: number;
+  workoutsThisWeek: number;
+  daysPerWeek: number;
+  message?: string;
+  needsOnboarding?: boolean;
+  workout?: {
+    id: string;
+    name: string;
+    exercises: ExercisePreview[];
   };
-
-  const c = content();
-  if (!c) return null;
-
-  return (
-    <div className="px-4 py-4 border-b border-[#1a1a1a]">
-      <div className="flex items-start gap-3">
-        <button onClick={() => activity.user.username && router.push(`/user/${activity.user.username}`)}>
-          <Avatar user={activity.user} />
-        </button>
-        <div className="flex-1 min-w-0">
-          {c}
-          <p className="text-xs text-neutral-600 mt-1.5">{timeAgo(activity.createdAt)}</p>
-        </div>
-      </div>
-    </div>
-  );
+  inProgressLog: string | null;
 }
 
-function EmptyFeed() {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-      <div className="text-5xl mb-4">🤝</div>
-      <h2 className="font-bold text-lg mb-2">Your feed is empty</h2>
-      <p className="text-neutral-500 text-sm mb-6">
-        Follow other athletes to see their workouts, PRs, and milestones here.
-      </p>
-      <Link
-        href="/discover"
-        className="px-6 py-3 bg-[#0066FF] text-white rounded-xl font-semibold text-sm"
-      >
-        Find People to Follow
-      </Link>
-    </div>
-  );
+interface NutritionData {
+  totals: { calories: number; protein: number; carbs: number; fat: number };
+  targets: { calories: number; protein: number; carbs: number; fat: number };
 }
 
 export default function HomePage() {
-  const [activities, setActivities] = useState<FeedActivity[]>([]);
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [today, setToday] = useState<TodayData | null>(null);
+  const [nutrition, setNutrition] = useState<NutritionData | null>(null);
+  const [streak, setStreak] = useState(0);
 
-  async function loadFeed() {
-    const res = await fetch("/api/social/feed");
-    if (res.ok) {
-      const data = await res.json();
-      setActivities(data.activities || []);
+  async function load() {
+    try {
+      const [todayRes, nutritionRes, profileRes] = await Promise.all([
+        fetch("/api/workouts/today"),
+        fetch("/api/nutrition"),
+        fetch("/api/user/profile"),
+      ]);
+
+      const todayData = await todayRes.json();
+      if (todayData.needsOnboarding) { router.push("/onboarding"); return; }
+      setToday(todayData);
+
+      if (nutritionRes.ok) {
+        const nutData = await nutritionRes.json();
+        setNutrition(nutData);
+      }
+
+      if (profileRes.ok) {
+        const profData = await profileRes.json();
+        setStreak(profData.streak?.currentStreak || 0);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
-  useEffect(() => { loadFeed(); }, []);
+  useEffect(() => { load(); }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const dateStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#0066FF] border-t-transparent rounded-full animate-spin" />
+      </main>
+    );
+  }
+
+  const caloriesPct = nutrition
+    ? Math.min(100, (nutrition.totals.calories / nutrition.targets.calories) * 100)
+    : 0;
+  const proteinPct = nutrition
+    ? Math.min(100, (nutrition.totals.protein / nutrition.targets.protein) * 100)
+    : 0;
 
   return (
-    <PullToRefreshWrapper onRefresh={loadFeed}>
-      <main className="min-h-screen bg-black text-white pb-24">
-        <header className="px-5 pt-8 pb-4 flex items-center justify-between border-b border-[#1a1a1a]">
-          <div className="text-xl font-bold tracking-tight">FORC3</div>
-          <Link href="/social/notifications" className="relative p-2">
-            <svg className="w-5 h-5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-          </Link>
-        </header>
-
-        {loading ? (
-          <div className="flex justify-center py-16">
-            <div className="w-8 h-8 border-2 border-[#0066FF] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : activities.length === 0 ? (
-          <EmptyFeed />
-        ) : (
+    <>
+    <WeeklySummaryPopup />
+    <PullToRefreshWrapper onRefresh={load}>
+    <main className="min-h-screen bg-black text-white pb-24">
+      {/* Header */}
+      <header className="px-6 pt-8 pb-4">
+        <div className="flex items-start justify-between">
           <div>
-            {activities.map(a => (
-              <ActivityCard key={a.id} activity={a} />
-            ))}
+            <div className="text-xs font-bold tracking-widest text-[#0066FF]">FORC3</div>
+            <h1 className="text-2xl font-bold mt-1">{dayName}</h1>
+            <p className="text-neutral-500 text-sm">{dateStr}</p>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-neutral-500">WEEK {today?.currentWeek || 1}</div>
+            <div className="text-xs text-neutral-400 mt-0.5">
+              {today?.workoutsThisWeek || 0}/{today?.daysPerWeek || 4} this week
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="px-6 space-y-5">
+        {/* TODAY'S WORKOUT */}
+        {today?.isRestDay ? (
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 text-center space-y-3">
+            <div className="text-4xl">😴</div>
+            <h2 className="text-lg font-semibold">Rest Day</h2>
+            <p className="text-sm text-neutral-500">
+              {today.message || "Rest well. Growth happens here."}
+            </p>
+          </div>
+        ) : today?.workout ? (
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#262626] flex items-center justify-between">
+              <div>
+                <p className="text-xs text-neutral-500 uppercase tracking-wide">Today</p>
+                <h2 className="text-lg font-bold mt-0.5">{today.workout.name}</h2>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {today.workout.exercises.length} exercises
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/workout/edit/${today.workout.id}`}
+                  className="px-3 py-2 text-[#0066FF] text-sm font-semibold border border-[#0066FF]/30 rounded-xl hover:bg-[#0066FF]/10 transition-colors"
+                >
+                  Edit
+                </Link>
+                <Link
+                  href={`/workout/${today.workout.id}`}
+                  className="px-5 py-2.5 bg-[#0066FF] text-white text-sm font-bold rounded-xl hover:bg-[#0052CC] transition-colors"
+                >
+                  {today.inProgressLog ? "Resume" : "Start"}
+                </Link>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              {today.workout.exercises.slice(0, 4).map(ex => (
+                <div key={ex.id} className="flex items-center justify-between">
+                  <span className="text-sm text-neutral-200">{ex.name}</span>
+                  <span className="text-xs text-neutral-500">
+                    {ex.sets} × {ex.repsMin}–{ex.repsMax}
+                    {ex.lastWeight ? ` • ${ex.lastWeight} lbs` : ""}
+                  </span>
+                </div>
+              ))}
+              {today.workout.exercises.length > 4 && (
+                <p className="text-xs text-neutral-600">
+                  +{today.workout.exercises.length - 4} more
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 text-center space-y-3">
+            <div className="text-4xl">💪</div>
+            <h2 className="text-lg font-semibold">No workout today</h2>
+            <p className="text-sm text-neutral-500">Start a free workout or check your plan.</p>
+            <div className="flex gap-3 justify-center">
+              <Link href="/workout/create" className="px-4 py-2 bg-[#0066FF] rounded-xl text-sm font-semibold">
+                Create Workout
+              </Link>
+              <Link href="/plan" className="px-4 py-2 bg-[#1a1a1a] border border-[#262626] rounded-xl text-sm font-semibold">
+                View Plan
+              </Link>
+            </div>
           </div>
         )}
 
-        <BottomNav active="home" />
-      </main>
+        {/* NUTRITION CARD */}
+        {nutrition && (
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Nutrition</h3>
+              <Link href="/nutrition" className="text-xs text-[#0066FF] hover:text-[#0052CC] transition-colors">
+                Log meal →
+              </Link>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-sm mb-1.5">
+                  <span className="text-neutral-400">Calories</span>
+                  <span>
+                    <span className="font-semibold">{Math.round(nutrition.totals.calories)}</span>
+                    <span className="text-neutral-500"> / {Math.round(nutrition.targets.calories)}</span>
+                  </span>
+                </div>
+                <div className="h-2 bg-[#0a0a0a] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#0066FF] rounded-full transition-all"
+                    style={{ width: `${caloriesPct}%` }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-sm mb-1.5">
+                  <span className="text-neutral-400">Protein</span>
+                  <span>
+                    <span className="font-semibold">{Math.round(nutrition.totals.protein)}g</span>
+                    <span className="text-neutral-500"> / {Math.round(nutrition.targets.protein)}g</span>
+                  </span>
+                </div>
+                <div className="h-2 bg-[#0a0a0a] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#00C853] rounded-full transition-all"
+                    style={{ width: `${proteinPct}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* QUICK STATS */}
+        <div className="grid grid-cols-2 gap-4">
+          <Link
+            href="/history"
+            className="bg-[#141414] border border-[#262626] rounded-2xl p-4 hover:border-[#0066FF]/50 transition-colors"
+          >
+            <div className="text-xs text-neutral-500 uppercase tracking-wide">This Week</div>
+            <div className="text-3xl font-bold mt-1">
+              {today?.workoutsThisWeek || 0}
+              <span className="text-lg text-neutral-500 font-normal"> / {today?.daysPerWeek || 4}</span>
+            </div>
+            <div className="text-xs text-neutral-500 mt-0.5">workouts</div>
+          </Link>
+
+          <Link
+            href="/progress"
+            className="bg-[#141414] border border-[#262626] rounded-2xl p-4 hover:border-[#0066FF]/50 transition-colors"
+          >
+            <div className="text-xs text-neutral-500 uppercase tracking-wide">Streak</div>
+            <div className="text-3xl font-bold mt-1">
+              {streak}
+              <span className="text-lg text-neutral-500 font-normal"> days</span>
+            </div>
+            <div className="text-xs text-neutral-500 mt-0.5">{streak >= 7 ? "🔥 On fire!" : "Keep going"}</div>
+          </Link>
+        </div>
+
+        {/* DISCOVER LINK */}
+        <Link
+          href="/discover"
+          className="flex items-center justify-between bg-[#141414] border border-[#262626] rounded-2xl p-4 hover:border-[#0066FF]/50 transition-colors"
+        >
+          <div>
+            <div className="font-semibold text-sm">Community Feed</div>
+            <div className="text-xs text-neutral-500 mt-0.5">See what others are training</div>
+          </div>
+          <span className="text-[#0066FF]">→</span>
+        </Link>
+      </div>
+
+      <BottomNav active="home" />
+    </main>
     </PullToRefreshWrapper>
+    </>
   );
 }
