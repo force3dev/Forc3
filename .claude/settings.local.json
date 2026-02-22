@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /c/Users/Geric/Desktop/forc3 && npm run dev 2>&1)",
+      "Bash(cd /c/Users/Geric/Desktop/forc3 && npm install 2>&1)",
+      "Bash(cd:*)",
+      "Bash(cd /c/Users/Geric/Desktop/forc3 && npx prisma db push 2>&1)",
+      "Bash(cd /c/Users/Geric/Desktop/forc3 && node -e \"const m = require\\('./node_modules/next-auth/react'\\); console.log\\(Object.keys\\(m\\)\\)\" 2>&1)"
+    ]
+  }
+}
