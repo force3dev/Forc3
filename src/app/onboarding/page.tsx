@@ -26,6 +26,8 @@ interface OnboardingData {
   unitSystem: "imperial" | "metric";
   heightFt: number;
   heightIn: number;
+  // Screen 9: Goal Description (free-text)
+  goalDescription: string;
 }
 
 const SPLIT_PREVIEW: Record<number, Record<string, string>> = {
@@ -64,9 +66,10 @@ export default function OnboardingPage() {
     unitSystem: "imperial",
     heightFt: 5,
     heightIn: 10,
+    goalDescription: "",
   });
 
-  const totalSteps = 10;
+  const totalSteps = 11;
 
   const update = (patch: Partial<OnboardingData>) =>
     setData(prev => ({ ...prev, ...patch }));
@@ -94,7 +97,8 @@ export default function OnboardingPage() {
       case 6: return true; // skippable
       case 7: return true; // skippable
       case 8: return data.age > 0 && data.weight > 0 && !!data.gender;
-      case 9: return false; // calculating screen handles its own transition
+      case 9: return true; // skippable free-text
+      case 10: return false; // calculating screen handles its own transition
       default: return true;
     }
   };
@@ -121,6 +125,7 @@ export default function OnboardingPage() {
           weight: weightKg,
           height: heightCm,
           goal: data.goal,
+          goalDescription: data.goalDescription,
           experienceLevel: data.experienceLevel,
           trainingDays: data.trainingDays,
           equipment: data.equipment,
@@ -135,7 +140,7 @@ export default function OnboardingPage() {
       if (!res.ok) throw new Error(result.error || "Failed");
 
       setPlanResult(result);
-      setStep(10);
+      setStep(11);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setStep(8); // go back to stats
@@ -146,7 +151,7 @@ export default function OnboardingPage() {
 
   // Auto-advance through calculating screen
   useEffect(() => {
-    if (step === 9) {
+    if (step === 10) {
       const timer = setTimeout(() => {
         handleSubmit();
       }, 2800);
@@ -166,7 +171,7 @@ export default function OnboardingPage() {
 
   // ─── Render Screens ─────────────────────────────────────────────────────────
 
-  if (step === 10 && planResult) {
+  if (step === 11 && planResult) {
     const splits: Record<string, string> = {
       ppl: "Push / Pull / Legs",
       upper_lower: "Upper / Lower",
@@ -213,17 +218,17 @@ export default function OnboardingPage() {
           </div>
 
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push("/onboarding/welcome")}
             className="w-full py-4 bg-[#0066FF] text-white font-bold rounded-xl hover:bg-[#0052CC] transition-colors"
           >
-            Start Training →
+            Meet Your Coach →
           </button>
         </div>
       </main>
     );
   }
 
-  if (step === 9) {
+  if (step === 10) {
     const messages = [
       "Analyzing your profile...",
       "Selecting optimal exercises...",
@@ -290,7 +295,7 @@ export default function OnboardingPage() {
                   Let&apos;s build your perfect program.
                 </h1>
                 <p className="text-neutral-400 text-base mt-3">
-                  10 quick questions. PhD-level results.
+                  11 quick questions. PhD-level results.
                   We&apos;ll create a training program and nutrition targets
                   tailored exactly to you.
                 </p>
@@ -642,13 +647,39 @@ export default function OnboardingPage() {
               )}
             </div>
           )}
+
+          {/* ── Screen 9: Goal Description (free-text) ────────────────────── */}
+          {step === 9 && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-2xl font-bold">Tell us more about your goal</h1>
+                <p className="text-neutral-500 text-sm mt-1">
+                  In your own words — your AI coach will read this. Skippable.
+                </p>
+              </div>
+              <div>
+                <textarea
+                  value={data.goalDescription}
+                  onChange={e => update({ goalDescription: e.target.value })}
+                  placeholder="e.g. I want to lose 20 lbs before my wedding in June. I've struggled with staying consistent before and tend to skip leg day..."
+                  rows={6}
+                  className="w-full p-4 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none transition-colors text-sm resize-none leading-relaxed"
+                />
+                <p className="text-xs text-neutral-600 mt-2">
+                  {data.goalDescription.length > 0
+                    ? `${data.goalDescription.length} characters`
+                    : "Optional — skip to continue"}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Nav buttons */}
-        {step !== 9 && step !== 10 && (
+        {step !== 10 && step !== 11 && (
           <div className="pt-6 pb-4">
             <button
-              onClick={step === 8 ? () => setStep(9) : next}
+              onClick={step === 9 ? () => setStep(10) : next}
               disabled={!canProceed() || loading}
               className={`w-full py-4 font-bold rounded-xl transition-all ${
                 canProceed() && !loading
@@ -656,7 +687,7 @@ export default function OnboardingPage() {
                   : "bg-[#0a0a0a] text-neutral-600 cursor-not-allowed border border-[#262626]"
               }`}
             >
-              {step === 8 ? "Build My Plan" : step === 1 ? "Let's Go →" : "Continue"}
+              {step === 9 ? "Build My Plan" : step === 1 ? "Let's Go →" : "Continue"}
             </button>
           </div>
         )}

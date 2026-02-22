@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       weight,      // in kg
       height,      // in cm
       goal,
+      goalDescription,
       experienceLevel,
       trainingDays,
       equipment,
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
           weight,
           height,
           goal,
+          goalDescription: goalDescription || null,
           experienceLevel,
           trainingDays,
           equipment,
@@ -77,6 +79,7 @@ export async function POST(req: NextRequest) {
           weight,
           height,
           goal,
+          goalDescription: goalDescription || null,
           experienceLevel,
           trainingDays,
           equipment,

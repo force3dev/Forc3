@@ -60,7 +60,8 @@ model Profile {
   unitSystem String @default("imperial") // imperial or metric
 
   // Onboarding state
-  onboardingDone Boolean @default(false)
+  onboardingDone  Boolean @default(false)
+  goalDescription String?
 
   currentPlan TrainingPlan?
 

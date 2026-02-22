@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { ReactNode } from "react";
 import SWRegistrar from "@/components/shared/SWRegistrar";
 import OfflineBanner from "@/components/shared/OfflineBanner";
+import AchievementToastProvider from "@/components/ui/AchievementToast";
 
 export const metadata: Metadata = {
   title: "FORC3 — PhD-Level Coaching at App Prices",
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="bg-black text-white antialiased">
         <SWRegistrar />
         <OfflineBanner />
+        <AchievementToastProvider />
         {children}
       </body>
     </html>

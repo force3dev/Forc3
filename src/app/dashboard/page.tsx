@@ -133,12 +133,20 @@ export default function DashboardPage() {
                   {today.workout.exercises.length} exercises
                 </p>
               </div>
-              <Link
-                href={`/workout/${today.workout.id}`}
-                className="px-5 py-2.5 bg-[#0066FF] text-white text-sm font-bold rounded-xl hover:bg-[#0052CC] transition-colors"
-              >
-                {today.inProgressLog ? "Resume" : "Start"}
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/workout/edit/${today.workout.id}`}
+                  className="px-3 py-2 text-[#0066FF] text-sm font-semibold border border-[#0066FF]/30 rounded-xl hover:bg-[#0066FF]/10 transition-colors"
+                >
+                  Edit
+                </Link>
+                <Link
+                  href={`/workout/${today.workout.id}`}
+                  className="px-5 py-2.5 bg-[#0066FF] text-white text-sm font-bold rounded-xl hover:bg-[#0052CC] transition-colors"
+                >
+                  {today.inProgressLog ? "Resume" : "Start"}
+                </Link>
+              </div>
             </div>
 
             <div className="px-5 py-4 space-y-3">
