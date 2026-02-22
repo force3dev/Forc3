@@ -2,6 +2,7 @@ import "../styles/globals.css";
 import type { Metadata, Viewport } from "next";
 import { ReactNode } from "react";
 import SWRegistrar from "@/components/shared/SWRegistrar";
+import OfflineBanner from "@/components/shared/OfflineBanner";
 
 export const metadata: Metadata = {
   title: "FORC3 — PhD-Level Coaching at App Prices",
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className="bg-black">
       <body className="bg-black text-white antialiased">
         <SWRegistrar />
+        <OfflineBanner />
         {children}
       </body>
     </html>

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import BottomNav from "@/components/shared/BottomNav";
+import PullToRefreshWrapper from "@/components/shared/PullToRefreshWrapper";
 
 interface NutritionLog {
   id: string;
@@ -585,6 +586,7 @@ export default function NutritionPage() {
 
   return (
     <>
+      <PullToRefreshWrapper onRefresh={async () => { await loadData(); }}>
       <main className="min-h-screen bg-black text-white pb-28">
         <header className="px-6 pt-8 pb-4">
           <div className="text-xs font-bold tracking-widest text-[#0066FF]">FORC3</div>
@@ -705,6 +707,7 @@ export default function NutritionPage() {
 
         <BottomNav active="nutrition" />
       </main>
+      </PullToRefreshWrapper>
 
       {showModal && (
         <AddFoodModal

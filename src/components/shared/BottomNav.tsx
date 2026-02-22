@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSwipe } from "@/hooks/useSwipe";
 
 type Tab = "home" | "workout" | "nutrition" | "progress" | "coach" | "profile";
 
@@ -65,7 +67,25 @@ const tabs: { id: Tab; label: string; href: string; icon: React.ReactNode }[] = 
   },
 ];
 
+const TAB_ORDER: Tab[] = ["home", "nutrition", "coach", "progress", "profile"];
+
 export default function BottomNav({ active }: Props) {
+  const router = useRouter();
+  const currentIndex = TAB_ORDER.indexOf(active);
+
+  useSwipe({
+    onSwipeLeft: () => {
+      if (currentIndex < TAB_ORDER.length - 1) {
+        router.push(tabs.find(t => t.id === TAB_ORDER[currentIndex + 1])!.href);
+      }
+    },
+    onSwipeRight: () => {
+      if (currentIndex > 0) {
+        router.push(tabs.find(t => t.id === TAB_ORDER[currentIndex - 1])!.href);
+      }
+    },
+  });
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-black border-t border-[#1a1a1a] px-2 py-2 safe-area-inset-bottom z-40">
       <div className="flex items-center justify-around max-w-lg mx-auto">

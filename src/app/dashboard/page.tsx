@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
+import PullToRefreshWrapper from "@/components/shared/PullToRefreshWrapper";
 
 interface ExercisePreview {
   id: string;
@@ -41,36 +42,35 @@ export default function DashboardPage() {
   const [nutrition, setNutrition] = useState<NutritionData | null>(null);
   const [streak, setStreak] = useState(0);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [todayRes, nutritionRes, profileRes] = await Promise.all([
-          fetch("/api/workouts/today"),
-          fetch("/api/nutrition"),
-          fetch("/api/user/profile"),
-        ]);
+  async function load() {
+    try {
+      const [todayRes, nutritionRes, profileRes] = await Promise.all([
+        fetch("/api/workouts/today"),
+        fetch("/api/nutrition"),
+        fetch("/api/user/profile"),
+      ]);
 
-        const todayData = await todayRes.json();
-        if (todayData.needsOnboarding) { router.push("/onboarding"); return; }
-        setToday(todayData);
+      const todayData = await todayRes.json();
+      if (todayData.needsOnboarding) { router.push("/onboarding"); return; }
+      setToday(todayData);
 
-        if (nutritionRes.ok) {
-          const nutData = await nutritionRes.json();
-          setNutrition(nutData);
-        }
-
-        if (profileRes.ok) {
-          const profData = await profileRes.json();
-          setStreak(profData.streak?.currentStreak || 0);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+      if (nutritionRes.ok) {
+        const nutData = await nutritionRes.json();
+        setNutrition(nutData);
       }
+
+      if (profileRes.ok) {
+        const profData = await profileRes.json();
+        setStreak(profData.streak?.currentStreak || 0);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    load();
-  }, [router]);
+  }
+
+  useEffect(() => { load(); }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
   const dateStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -91,6 +91,7 @@ export default function DashboardPage() {
     : 0;
 
   return (
+    <PullToRefreshWrapper onRefresh={load}>
     <main className="min-h-screen bg-black text-white pb-24">
       {/* Header */}
       <header className="px-6 pt-8 pb-4">
@@ -232,5 +233,6 @@ export default function DashboardPage() {
 
       <BottomNav active="home" />
     </main>
+    </PullToRefreshWrapper>
   );
 }
