@@ -47,8 +47,22 @@ model User {
   notifications    Notification[]
   followRequests   FollowRequest[] @relation("RequestReceiver")
   sentRequests     FollowRequest[] @relation("RequestSender")
-  cardioActivities CardioActivity[]
-  workoutCopies    WorkoutCopy[]
+  cardioActivities  CardioActivity[]
+  workoutCopies     WorkoutCopy[]
+  healthData        HealthData[]
+  stravaActivities  StravaActivity[]
+  pushSubscriptions PushSubscription[]
+  progressPhotos    ProgressPhoto[]
+
+  // Strava OAuth
+  stravaAccessToken  String?
+  stravaRefreshToken String?
+  stravaTokenExpiry  DateTime?
+  stravaAthleteId    String?
+  stravaConnected    Boolean  @default(false)
+
+  // Notification preferences (JSON)
+  notificationPreferences String @default("{}")
 }
 
 model Profile {
@@ -421,13 +435,18 @@ model BodyMeasurement {
 model ProgressPhoto {
   id       String   @id @default(cuid())
   userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  imageUrl String
-  date     DateTime @default(now())
-  type     String   // front, side, back
-  notes    String?
-  weight   Float?
-  bodyFat  Float?
+  imageUrl  String
+  photoUrl  String?  // alias kept for API compatibility
+  date      DateTime @default(now())
+  type      String?  // front, side, back
+  notes     String?
+  weight    Float?
+  bodyFat   Float?
+  isPrivate Boolean  @default(true)
+
+  createdAt DateTime @default(now())
 }
 
 // ─── Progression Tracking ─────────────────────────────────────────────────────
@@ -465,6 +484,14 @@ model Subscription {
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
   trialEnd           DateTime?
+
+  // AI message rate limiting
+  aiMessagesUsedToday Int      @default(0)
+  aiMessagesResetAt   DateTime @default(now())
+
+  // Morning check-in cache
+  morningCheckinMessage String?
+  morningCheckinDate    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -611,6 +638,66 @@ model CardioActivity {
   completed    Boolean  @default(false)
   completedAt  DateTime?
   createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── Health Data ──────────────────────────────────────────────────────────────
+
+model HealthData {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date           DateTime
+  sleepHours     Float?
+  sleepQuality   Int?     // 1-10 self reported
+  energyLevel    Int?     // 1-10
+  soreness       String?  // none, mild, moderate, severe
+  hrvScore       Float?   // ms
+  restingHR      Int?     // bpm
+  steps          Int?
+  activeCalories Int?
+  weight         Float?   // kg
+  source         String   @default("manual") // manual, apple_health, garmin, strava
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+// ─── Strava ───────────────────────────────────────────────────────────────────
+
+model StravaActivity {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stravaId     String   @unique
+  name         String
+  type         String   // Run, Ride, Swim, etc.
+  date         DateTime
+  distance     Float    // meters
+  duration     Int      // seconds
+  elevation    Float?   // meters
+  avgHeartRate Int?
+  maxHeartRate Int?
+  avgPace      Float?   // seconds per km
+  calories     Int?
+  imported     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── Push Notifications ───────────────────────────────────────────────────────
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
 
   @@index([userId])
 }
