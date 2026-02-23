@@ -1,1 +1,14 @@
-{}
+{
+  "components\\ProgressPhotoGallery.tsx -> @/components/ProgressPhotoCompare": {
+    "id": 79304,
+    "files": [
+      "static/chunks/9304.e18ae0a5e61e6d5e.js"
+    ]
+  },
+  "lib\\share-card.ts -> html2canvas": {
+    "id": 81173,
+    "files": [
+      "static/chunks/ad2866b8.0a10d661ca31722a.js"
+    ]
+  }
+}
