@@ -5,6 +5,7 @@ import SWRegistrar from "@/components/shared/SWRegistrar";
 import OfflineBanner from "@/components/shared/OfflineBanner";
 import AchievementToastProvider from "@/components/ui/AchievementToast";
 import InstallPrompt from "@/components/InstallPrompt";
+import { ToastProvider } from "@/components/Toast";
 
 export const metadata: Metadata = {
   title: "FORC3 — PhD-Level Coaching at App Prices",
@@ -33,9 +34,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="bg-black text-white antialiased">
         <SWRegistrar />
         <OfflineBanner />
-        <AchievementToastProvider />
-        <InstallPrompt />
-        {children}
+        <ToastProvider>
+          <AchievementToastProvider />
+          <InstallPrompt />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

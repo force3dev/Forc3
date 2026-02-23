@@ -3,6 +3,9 @@ import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { estimateOneRepMax } from "@/lib/calculations/oneRepMax";
 import { checkAndAwardAchievements, seedAchievements } from "@/lib/gamification/achievements";
+import { XP_VALUES, getLevelFromXP } from "@/lib/xp-system";
+import { postToFeed } from "@/lib/activity-feed";
+import { analyzeInjuryRisk } from "@/lib/injury-prevention";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +99,7 @@ export async function POST(req: NextRequest) {
       if (isPR && !isWarmup) {
         await seedAchievements();
         await checkAndAwardAchievements(userId);
+        await awardXP(userId, XP_VALUES.newPR);
       }
 
       return NextResponse.json({
@@ -143,6 +147,23 @@ export async function POST(req: NextRequest) {
       await seedAchievements(); // idempotent upsert
       const newAchievements = await checkAndAwardAchievements(userId);
 
+      // Award XP for completing workout
+      await awardXP(userId, XP_VALUES.completeWorkout);
+
+      // Post to activity feed (non-blocking)
+      const workoutName = log.workoutId
+        ? (await prisma.workout.findUnique({ where: { id: log.workoutId }, select: { name: true } }))?.name ?? "Workout"
+        : "Workout";
+      postToFeed(userId, 'workout_complete', {
+        workoutName: workoutName || "Workout",
+        duration,
+        totalVolume: Math.round(totalVolume),
+        xp: XP_VALUES.completeWorkout,
+      }).catch(() => {})
+
+      // Run injury risk analysis (non-blocking)
+      analyzeInjuryRisk(userId).catch(() => {})
+
       return NextResponse.json({ success: true, duration, totalVolume, newAchievements });
     }
 
@@ -180,6 +201,17 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ logs });
 }
 
+async function awardXP(userId: string, amount: number) {
+  const streak = await prisma.streak.findUnique({ where: { userId } });
+  if (!streak) return;
+  const newXP = (streak.totalXP || 0) + amount;
+  const newLevel = getLevelFromXP(newXP).level;
+  await prisma.streak.update({
+    where: { userId },
+    data: { totalXP: newXP, level: newLevel },
+  });
+}
+
 async function updateStreak(userId: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -187,7 +219,7 @@ async function updateStreak(userId: string) {
   const streak = await prisma.streak.findUnique({ where: { userId } });
   if (!streak) {
     await prisma.streak.create({
-      data: { userId, currentStreak: 1, longestStreak: 1, lastWorkoutDate: new Date() },
+      data: { userId, currentStreak: 1, longestStreak: 1, lastWorkoutDate: new Date(), totalWorkouts: 1 },
     });
     return;
   }
@@ -214,12 +246,13 @@ async function updateStreak(userId: string) {
         currentStreak: newStreak,
         longestStreak: Math.max(newStreak, streak.longestStreak),
         lastWorkoutDate: new Date(),
+        totalWorkouts: (streak.totalWorkouts || 0) + 1,
       },
     });
   } else {
     await prisma.streak.update({
       where: { userId },
-      data: { currentStreak: 1, lastWorkoutDate: new Date() },
+      data: { currentStreak: 1, lastWorkoutDate: new Date(), totalWorkouts: (streak.totalWorkouts || 0) + 1 },
     });
   }
 }

@@ -10,6 +10,8 @@ interface Exercise {
   secondaryMuscles: string;  // JSON string
   formTips: string;          // JSON string
   commonMistakes: string;    // JSON string
+  coachingCues?: string;     // JSON string
+  alternatives?: string;     // JSON string
   instructions?: string | null;
   category: string;
 }
@@ -29,6 +31,8 @@ export function ExerciseDetailModal({ exercise, onClose }: Props) {
   const secondary = parseJSON(exercise.secondaryMuscles);
   const formTips = parseJSON(exercise.formTips);
   const mistakes = parseJSON(exercise.commonMistakes);
+  const cues = parseJSON(exercise.coachingCues || "[]");
+  const alternatives = parseJSON(exercise.alternatives || "[]");
 
   return (
     <AnimatePresence>
@@ -53,6 +57,7 @@ export function ExerciseDetailModal({ exercise, onClose }: Props) {
             {/* GIF Demo */}
             {exercise.gifUrl && (
               <div className="rounded-2xl overflow-hidden bg-[#0a0a0a] border border-[#1a1a1a]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={exercise.gifUrl}
                   alt={exercise.name}
@@ -138,6 +143,37 @@ export function ExerciseDetailModal({ exercise, onClose }: Props) {
                       <span className="text-red-400 mt-0.5 flex-shrink-0">✗</span>
                       <span className="text-neutral-300">{m}</span>
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {cues.length > 0 && (
+              <div className="bg-[#141414] border border-[#262626] rounded-2xl p-5">
+                <p className="text-xs text-neutral-500 uppercase tracking-wide font-semibold mb-3">
+                  Coaching Cues
+                </p>
+                <div className="space-y-2.5">
+                  {cues.map((cue, i) => (
+                    <div key={i} className="flex gap-3 text-sm">
+                      <span className="text-yellow-300 mt-0.5 flex-shrink-0">💡</span>
+                      <span className="text-neutral-300">&quot;{cue}&quot;</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {alternatives.length > 0 && (
+              <div className="bg-[#141414] border border-[#262626] rounded-2xl p-5">
+                <p className="text-xs text-neutral-500 uppercase tracking-wide font-semibold mb-3">
+                  Similar Exercises
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {alternatives.map((alt, i) => (
+                    <span key={`${alt}-${i}`} className="px-2.5 py-1 rounded-full border border-[#2c2c2c] bg-[#101010] text-xs text-neutral-300">
+                      {alt}
+                    </span>
                   ))}
                 </div>
               </div>

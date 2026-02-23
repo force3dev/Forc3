@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Avatar from "@/components/Avatar";
 
 interface UserProfile {
   id: string;
@@ -29,20 +30,6 @@ interface ProfileData {
   isPending: boolean;
   isBlocked: boolean;
   sharedWorkouts: SharedWorkout[];
-}
-
-function Avatar({ user }: { user: { displayName?: string | null; username?: string | null; avatarUrl?: string | null } }) {
-  return (
-    <div className="w-20 h-20 rounded-full bg-[#0066FF]/20 border-2 border-[#0066FF]/30 flex items-center justify-center overflow-hidden">
-      {user.avatarUrl ? (
-        <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
-      ) : (
-        <span className="text-[#0066FF] font-bold text-2xl">
-          {(user.displayName || user.username || "?")[0].toUpperCase()}
-        </span>
-      )}
-    </div>
-  );
 }
 
 export default function UserProfilePage({ params }: { params: { username: string } }) {
@@ -126,7 +113,7 @@ export default function UserProfilePage({ params }: { params: { username: string
       {/* Profile Header */}
       <div className="px-5 pb-6">
         <div className="flex items-center gap-4 mb-4">
-          <Avatar user={user} />
+          <Avatar user={{ avatarUrl: user.avatarUrl, name: user.displayName || user.username || "Athlete" }} size="xl" />
           <div className="flex gap-6">
             <div className="text-center">
               <div className="text-xl font-bold">{user.followers}</div>

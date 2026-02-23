@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
+import Avatar from "@/components/Avatar";
 
 interface ProfileData {
   id: string;
@@ -180,7 +181,7 @@ function StatsView({ data }: { data: ProfileData }) {
 
       {/* Actions */}
       <div className="bg-[#141414] border border-[#262626] rounded-2xl overflow-hidden">
-        <Link href="/settings/profile" className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors">
+        <Link href="/profile/edit" className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors">
           <span className="text-sm">Edit Profile</span>
           <span className="text-neutral-500">→</span>
         </Link>
@@ -256,15 +257,11 @@ export default function ProfilePage() {
       <div className="px-5 pb-4">
         <div className="flex items-center gap-5 mb-4">
           {/* Avatar */}
-          <div className="w-20 h-20 rounded-full bg-[#0066FF]/20 border-2 border-[#0066FF]/40 flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {data?.avatarUrl ? (
-              <img src={data.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-[#0066FF] font-bold text-3xl">
-                {(data?.displayName || profile?.name || data?.email || "?")[0].toUpperCase()}
-              </span>
-            )}
-          </div>
+          <Avatar
+            user={{ avatarUrl: data?.avatarUrl, name: data?.displayName || profile?.name || data?.email || "Athlete" }}
+            size="xl"
+            className="border-2 border-[#0066FF]/40 bg-[#0066FF]/20"
+          />
 
           {/* Stats Row */}
           <div className="flex-1 flex justify-around">
@@ -272,11 +269,11 @@ export default function ProfilePage() {
               <div className="text-xl font-bold">{data?.workoutsCount ?? 0}</div>
               <div className="text-xs text-neutral-500">Workouts</div>
             </div>
-            <Link href={`/user/${data?.username}/followers`} className="text-center">
+            <Link href={`/profile/${data?.id}/followers`} className="text-center">
               <div className="text-xl font-bold">{data?.followersCount ?? 0}</div>
               <div className="text-xs text-neutral-500">Followers</div>
             </Link>
-            <Link href={`/user/${data?.username}/following`} className="text-center">
+            <Link href={`/profile/${data?.id}/following`} className="text-center">
               <div className="text-xl font-bold">{data?.followingCount ?? 0}</div>
               <div className="text-xs text-neutral-500">Following</div>
             </Link>
@@ -298,7 +295,7 @@ export default function ProfilePage() {
         {/* Action Buttons */}
         <div className="flex gap-2">
           <Link
-            href="/settings/profile"
+            href="/profile/edit"
             className="flex-1 py-2 bg-[#1a1a1a] border border-[#262626] rounded-lg font-semibold text-sm text-center"
           >
             Edit Profile

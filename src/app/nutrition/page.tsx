@@ -548,6 +548,47 @@ function AddFoodModal({
   );
 }
 
+function NutritionCoachSection() {
+  const [advice, setAdvice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [asked, setAsked] = useState(false);
+
+  async function getAdvice() {
+    setLoading(true);
+    setAsked(true);
+    try {
+      const r = await fetch("/api/nutrition/coach");
+      const d = await r.json();
+      setAdvice(d.advice || null);
+    } catch {
+      setAdvice("Coach is unavailable right now. Try again later.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="bg-gradient-to-br from-[#0066FF]/10 to-[#00C853]/5 border border-[#0066FF]/30 rounded-2xl p-5 space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="text-2xl">🧠</span>
+        <div>
+          <h3 className="font-bold text-sm">Nutrition Coach</h3>
+          <p className="text-neutral-500 text-xs">Personalized advice based on today&apos;s training</p>
+        </div>
+      </div>
+      {!asked ? (
+        <button onClick={getAdvice} className="w-full py-3 bg-[#0066FF] text-white font-bold rounded-xl text-sm">
+          Ask Coach Alex →
+        </button>
+      ) : loading ? (
+        <div className="animate-pulse h-16 bg-[#1a1a1a] rounded-xl" />
+      ) : (
+        <p className="text-sm text-neutral-300 leading-relaxed bg-[#141414] rounded-xl p-4">{advice}</p>
+      )}
+    </div>
+  );
+}
+
 export default function NutritionPage() {
   const [data, setData] = useState<NutritionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -704,6 +745,9 @@ export default function NutritionPage() {
             </div>
           )}
         </div>
+
+        {/* AI Nutrition Coach section */}
+        <NutritionCoachSection />
 
         <BottomNav active="workout" />
       </main>

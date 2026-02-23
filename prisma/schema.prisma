@@ -63,6 +63,24 @@ model User {
 
   // Notification preferences (JSON)
   notificationPreferences String @default("{}")
+
+  // Admin
+  isAdmin Boolean @default(false)
+
+  // Referral
+  referralCode     String?   @unique
+  referralCredits  Int       @default(0)
+  referredBy       String?
+  referralsSent    Referral[] @relation("ReferralsSent")
+  referralReceived Referral?  @relation("ReferralReceived")
+
+  // Injury & challenges
+  injuryFlags    InjuryFlag[]
+  userInjuries   UserInjury[]
+  challengeEntries ChallengeEntry[]
+  friendshipsInitiated Friendship[] @relation("FriendshipUser")
+  friendshipsReceived  Friendship[] @relation("FriendshipFriend")
+  nutritionTarget NutritionTarget?
 }
 
 model Profile {
@@ -100,9 +118,15 @@ model Profile {
   raceGoals      Json?    // array of {type, date, priority}
   trainingVolume String?  // "beginner", "intermediate", "advanced"
 
+  // Extended onboarding fields
+  sessionLength   Int?    // 30, 45, 60, or 90 minutes
+  nutritionGoal   String? // cut, maintain, bulk, performance
+  limitations     String  @default("[]") // JSON array (replaces injuries conceptually)
+
   // Onboarding state
   onboardingDone  Boolean @default(false)
   goalDescription String?
+  customGoal      String? // for "custom" goal type
 
   currentPlan TrainingPlan?
 
@@ -152,28 +176,44 @@ model Workout {
 model Exercise {
   id   String @id @default(cuid())
   name String @unique
+  slug String? @unique
 
-  category         String  // compound, isolation, cardio
-  muscleGroups     String  @default("[]") // JSON array
-  secondaryMuscles String  @default("[]") // JSON array
+  category         String  // strength, cardio, flexibility, plyometric, olympic
+  muscleGroups     String  @default("[]") // JSON array — primary muscles
+  secondaryMuscles String  @default("[]") // JSON array — secondary muscles
   equipment        String  @default("[]") // JSON array
+  movementPattern  String? // push, pull, hinge, squat, carry, rotate, isometric
   fatigueRating    Float   @default(1.0)
-  skillLevel       String  @default("beginner")
-  avoidIfInjury    String  @default("[]") // JSON array
-  instructions     String?
+  skillLevel       String  @default("beginner") // beginner, intermediate, advanced
+  avoidIfInjury    String  @default("[]") // JSON array (contraindications)
+  instructions     String? // legacy single string
+  formTips         String  @default("[]") // JSON array — step-by-step instructions
+  commonMistakes   String  @default("[]") // JSON array
+  coachingCues     String  @default("[]") // JSON array — technique tips
+  alternatives     String  @default("[]") // JSON array — alternative exercise names
   videoUrl         String?
 
   // Exercise visuals
-  gifUrl          String?
-  muscleImageUrl  String?
-  formTips        String  @default("[]") // JSON array
-  commonMistakes  String  @default("[]") // JSON array
-  externalId      String?
-  source          String? // exercisedb, musclewiki, custom
+  gifUrl                String?
+  imageUrl              String?
+  muscleImageUrl        String?
+  primaryMuscleImageUrl String?
+  externalId            String?
+  source                String? @default("custom") // exercisedb, wger, custom
+
+  createdAt DateTime @default(now())
 
   workoutExercises WorkoutExercise[]
   exerciseLogs     ExerciseLog[]
   personalRecords  PersonalRecord[]
+}
+
+model NutritionCache {
+  id        String   @id @default(cuid())
+  query     String   @unique
+  results   Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime
 }
 
 model WorkoutExercise {
@@ -264,10 +304,15 @@ model NutritionLog {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   date    DateTime @default(now())
+  meal    String   @default("snack") // "breakfast" | "lunch" | "dinner" | "snack"
+  foodName String  @default("")
   calories Float
   protein  Float
   carbs    Float
   fat      Float
+  quantity Float    @default(1)
+  unit     String   @default("serving") // "g" | "oz" | "cup" | "serving"
+  source   String   @default("manual")  // "manual" | "barcode" | "ai"
 
   mealName        String?
   foodDescription String?
@@ -361,6 +406,9 @@ model Streak {
   currentStreak   Int       @default(0)
   longestStreak   Int       @default(0)
   lastWorkoutDate DateTime?
+  totalXP         Int       @default(0)
+  level           Int       @default(1)
+  totalWorkouts   Int       @default(0)
 
   updatedAt DateTime @updatedAt
 }
@@ -700,4 +748,109 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// ─── Referral ─────────────────────────────────────────────────────────────────
+
+model Referral {
+  id          String    @id @default(cuid())
+  referrerId  String
+  referredId  String? @unique
+  referralCode String   @unique
+  email       String?
+  status      String    @default("pending") // "pending" | "signed_up" | "converted"
+  rewardGiven Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  convertedAt DateTime?
+  referrer    User      @relation("ReferralsSent", fields: [referrerId], references: [id])
+  referred    User?     @relation("ReferralReceived", fields: [referredId], references: [id])
+}
+
+// ─── Injury Prevention ────────────────────────────────────────────────────────
+
+model InjuryFlag {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String   // "overuse" | "volume_spike" | "imbalance" | "fatigue"
+  severity     String   // "info" | "warning" | "alert"
+  muscle       String?
+  message      String
+  acknowledged Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model UserInjury {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  area      String
+  severity  String    // "mild" | "moderate" | "severe"
+  startDate DateTime
+  endDate   DateTime?
+  active    Boolean   @default(true)
+  notes     String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ─── Nutrition Target ─────────────────────────────────────────────────────────
+
+model NutritionTarget {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calories  Int
+  protein   Int
+  carbs     Int
+  fat       Int
+  phase     String   @default("maintain") // "cut" | "maintain" | "bulk"
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Challenges ───────────────────────────────────────────────────────────────
+
+model Challenge {
+  id          String           @id @default(cuid())
+  title       String
+  description String
+  type        String           // "run_distance" | "workout_count" | "streak" | "lift_volume"
+  target      Float
+  unit        String           // "km" | "workouts" | "days" | "kg"
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  entries     ChallengeEntry[]
+}
+
+model ChallengeEntry {
+  id          String    @id @default(cuid())
+  challengeId String
+  userId      String
+  progress    Float     @default(0)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, userId])
+}
+
+// ─── Friendship ───────────────────────────────────────────────────────────────
+
+model Friendship {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  status    String   @default("pending") // "pending" | "accepted" | "blocked"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation("FriendshipUser", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendshipFriend", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
 }

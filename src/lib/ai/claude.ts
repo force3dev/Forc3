@@ -143,7 +143,18 @@ async function buildCoachSystemPrompt(userId: string): Promise<string> {
     }
   }
 
-  return `You are FORC3 AI Coach — a world-class personal trainer and nutrition coach with PhD-level expertise in exercise science and sports nutrition.
+  return `You are Coach Alex — a world-class coach who works with EVERYONE: bodybuilders, powerlifters, endurance athletes, beginners, combat sports athletes, people losing weight, older adults, hybrid athletes, and more. You've trained Olympic athletes, Ironman champions, powerlifting record holders, and everyday people just getting started. You're direct, motivating, and real. You don't sugarcoat but you always believe in your athletes. You remember everything about your athletes and reference their history naturally. You speak like a human coach — casual but expert, encouraging but honest.
+
+Rules for your communication style:
+- Never say "Great question!" or robotic filler phrases
+- Never use bullet points in conversational messages — speak naturally
+- Reference their specific history when relevant: "Last Tuesday you hit X, today let's aim for Y"
+- Call them by first name occasionally
+- Be brief when brief is better — don't pad responses
+- Celebrate wins genuinely, not over the top
+- When they miss workouts, be real but understanding — not preachy
+- Use occasional emphasis but not constantly
+- Sound like a coach, not a chatbot
 
 ## YOUR CLIENT
 Name: ${profile?.name || "Athlete"}
@@ -153,7 +164,7 @@ Training days: ${profile?.trainingDays || 4}/week
 Equipment: ${profile?.equipment || "full_gym"}
 Injuries/Limitations: ${profile?.injuries ? JSON.parse(profile.injuries).join(", ") || "None" : "None"}
 ${profile?.sport ? `Sport focus: ${profile.sport}` : ""}
-${hasRaces ? `\n## RACE / EVENT GOALS\nThis athlete is training for: ${raceGoalsStr}\nPrioritize sport-specific cardio programming and taper appropriately as the race approaches.${raceTaperNote}` : ""}
+${hasRaces ? `\n## RACE / EVENT GOALS\nTraining for: ${raceGoalsStr}\nPrioritize sport-specific cardio and taper as race approaches.${raceTaperNote}` : ""}
 
 Stats:
 - Weight: ${profile?.weight ? `${profile.weight} ${profile?.unitSystem === "imperial" ? "lbs" : "kg"}` : "not set"}
@@ -187,21 +198,13 @@ ${formatRecentWorkouts(workouts)}
 ## RECENT NUTRITION (Last 7 days)
 ${formatRecentNutrition(nutrition)}
 
-## YOUR COACHING STYLE
-- Direct and concise — they're probably at the gym or on the go
-- Evidence-based: cite real sports science principles when helpful
-- Personalized: always reference THEIR actual numbers and data
-- Motivating without being cheesy
-- Specific: "add 5 lbs to your bench press" not "try going heavier"
-- Flag concerning patterns (overtraining signs, undereating, etc.)
-${hasRaces ? "- Reference their upcoming race when giving advice — connect today's training to their race goal" : ""}
-
-## RULES
+## COACHING RULES
 1. Always reference their actual data when giving advice
 2. If they ask about changing their plan, explain the WHY
 3. Be specific with numbers — "aim for 180g protein" not "eat more protein"
 4. Keep responses concise — 3-5 sentences unless they ask for detail
-5. If you notice concerning patterns, flag them proactively`;
+5. If you notice concerning patterns, flag them proactively
+6. Reference their upcoming race when relevant — connect today's training to their goal`;
 }
 
 // ─── Main Ask Function ────────────────────────────────────────────────────────
@@ -332,6 +335,188 @@ Respond as JSON array only: ["tip 1", "tip 2", "tip 3"]`,
     return JSON.parse(cleaned);
   } catch {
     return ["Focus on form today.", "Push hard on your working sets.", "Stay hydrated!"];
+  }
+}
+
+// ─── AI Program Generator ────────────────────────────────────────────────────
+
+export interface AIProgramInput {
+  name?: string;
+  primaryGoal: string;
+  customGoal?: string;
+  sport?: string;
+  experienceLevel: string;
+  trainingDaysPerWeek: number;
+  sessionLength: number;
+  equipment: string[];
+  limitations: string[];
+  age?: number;
+  weight?: number;
+  height?: number;
+  raceGoal?: string;
+  raceDate?: string;
+  goalDescription?: string;
+}
+
+export interface AIGeneratedExercise {
+  name: string;
+  sets: number;
+  reps: string;
+  rest: number;
+  tempo: string;
+  notes: string;
+  muscleGroups: string[];
+  equipment: string;
+}
+
+export interface AIGeneratedWorkout {
+  name: string;
+  exercises: AIGeneratedExercise[];
+  warmUp: string;
+  coolDown: string;
+  estimatedDuration: number;
+  coachNotes: string;
+}
+
+export interface AIGeneratedDay {
+  day: number;
+  dayName: string;
+  focus: string;
+  type: "strength" | "cardio" | "hybrid" | "rest" | "active_recovery";
+  workout: AIGeneratedWorkout | null;
+  cardio: { type: string; duration: number; description: string } | null;
+}
+
+export interface AIGeneratedProgram {
+  programName: string;
+  programDescription: string;
+  weeklyStructure: AIGeneratedDay[];
+  coachMessage: string;
+  progressionRules: string;
+  keyFocusAreas: string[];
+}
+
+export async function generateAIProgram(input: AIProgramInput): Promise<AIGeneratedProgram> {
+  const client = getClient();
+
+  const equipmentList = input.equipment.length > 0
+    ? input.equipment.join(", ")
+    : "bodyweight only";
+
+  const limitationsList = input.limitations.length > 0
+    ? input.limitations.join(", ")
+    : "none";
+
+  const systemPrompt = `You are Coach Alex, a world-class coach with expertise in:
+- Strength training and powerlifting
+- Bodybuilding and physique development
+- Endurance sports (running, cycling, swimming, triathlon)
+- Sport-specific conditioning (MMA, basketball, football, etc)
+- Fat loss and body recomposition
+- Beginner programming and movement fundamentals
+- Advanced periodization and peaking
+- Injury rehabilitation and prevention
+- Longevity and general health fitness
+
+You create fully personalized programs for anyone regardless of their goal.
+You never use cookie-cutter templates — every program is built from scratch
+based on the individual's specific situation.
+
+ALWAYS return valid JSON in exactly this format:
+{
+  "programName": "string",
+  "programDescription": "string",
+  "weeklyStructure": [
+    {
+      "day": 1,
+      "dayName": "Monday",
+      "focus": "string",
+      "type": "strength|cardio|hybrid|rest|active_recovery",
+      "workout": {
+        "name": "string",
+        "exercises": [
+          {
+            "name": "string",
+            "sets": number,
+            "reps": "string",
+            "rest": number,
+            "tempo": "string",
+            "notes": "string",
+            "muscleGroups": ["string"],
+            "equipment": "string"
+          }
+        ],
+        "warmUp": "string",
+        "coolDown": "string",
+        "estimatedDuration": number,
+        "coachNotes": "string"
+      },
+      "cardio": null
+    }
+  ],
+  "coachMessage": "string",
+  "progressionRules": "string",
+  "keyFocusAreas": ["string"]
+}
+
+Return ONLY the JSON object with no markdown, no explanation, no other text.`;
+
+  const userPrompt = `Create a complete personalized training program for this athlete:
+
+Name: ${input.name || "Athlete"}
+Primary Goal: ${input.primaryGoal}
+Custom Goal Description: ${input.customGoal || "N/A"}
+Sport: ${input.sport || "N/A"}
+Experience Level: ${input.experienceLevel}
+Training Days Per Week: ${input.trainingDaysPerWeek}
+Session Length: ${input.sessionLength} minutes
+Available Equipment: ${equipmentList}
+Physical Limitations: ${limitationsList}
+Age: ${input.age || "Not specified"}
+Weight: ${input.weight ? `${input.weight} kg` : "Not specified"}
+Height: ${input.height ? `${input.height} cm` : "Not specified"}
+Upcoming Race/Event: ${input.raceGoal || "None"}
+Race Date: ${input.raceDate || "N/A"}
+Additional Context: ${input.goalDescription || "None"}
+
+Build them a complete ${input.trainingDaysPerWeek}-day training week that:
+1. Perfectly matches their goal (NOT a generic program)
+2. Uses ONLY their available equipment: ${equipmentList}
+3. Avoids exercises that aggravate: ${limitationsList}
+4. Is appropriate for their experience level: ${input.experienceLevel}
+5. Fits within ${input.sessionLength} minutes per session
+6. Includes specific coaching cues for each exercise
+7. Has warm-up and cool-down for every workout day
+8. Includes cardio where relevant to the goal
+
+Goal-specific guidance:
+- muscle_gain/bodybuilding: hypertrophy focus, 3-4 sets × 8-12 reps, include isolation work
+- strength/powerlifting: low reps (1-5), main lifts first, heavy accessories
+- fat_loss: compound movements, metabolic circuits, integrate cardio
+- complete_beginner: fundamental movement patterns, low volume, build confidence
+- endurance: sport-specific cardio programming, 2x/week max strength
+- sport_performance: explosive power, conditioning, sport-specific movements
+- longevity: joint-friendly movements, mobility, sustainable training
+- hybrid: balance strength and cardio based on days available
+- triathlon: all three disciplines + strength support
+
+Sunday should always be rest or active recovery.
+Return only the JSON object.`;
+
+  const response = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 4096,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "{}";
+  const cleaned = text.replace(/```json\n?|\n?```/g, "").trim();
+
+  try {
+    return JSON.parse(cleaned) as AIGeneratedProgram;
+  } catch {
+    throw new Error("AI program generation returned invalid JSON");
   }
 }
 

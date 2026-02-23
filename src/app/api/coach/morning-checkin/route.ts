@@ -14,9 +14,73 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-export async function GET() {
+// ─── Missed Workout Check-In ───────────────────────────────────────────────────
+
+async function getMissedWorkoutMessage(
+  userId: string,
+  client: Anthropic
+): Promise<{ show: boolean; message: string; daysSince: number }> {
+  const [profile, lastLog] = await Promise.all([
+    prisma.profile.findUnique({ where: { userId } }),
+    prisma.workoutLog.findFirst({
+      where: { userId, completedAt: { not: null } },
+      orderBy: { completedAt: "desc" },
+      include: { workout: { select: { name: true } } },
+    }),
+  ]);
+
+  if (!lastLog?.completedAt) return { show: false, message: "", daysSince: 0 };
+  const daysSince = Math.floor((Date.now() - new Date(lastLog.completedAt).getTime()) / 86400000);
+  if (daysSince < 2) return { show: false, message: "", daysSince };
+
+  const athleteName = profile?.name?.split(" ")[0] || "Athlete";
+  const goal = profile?.goal?.replace(/_/g, " ") || "your goal";
+  const raceGoals = Array.isArray(profile?.raceGoals) ? profile.raceGoals as { type?: string; date?: string }[] : [];
+  const nearest = raceGoals
+    .filter(r => r.date)
+    .map(r => ({ type: r.type, days: Math.max(0, Math.round((new Date(r.date!).getTime() - Date.now()) / 86400000)) }))
+    .sort((a, b) => a.days - b.days)[0];
+
+  const prompt = `${athleteName} missed their last ${daysSince} days of training.
+Last workout was: ${lastLog.workout?.name || "a workout"}
+Their current goal: ${goal}
+${nearest ? `Race in ${nearest.days} days: ${nearest.type?.replace(/_/g, " ")}` : ""}
+
+Write a brief, human check-in message (2-3 sentences max).
+Be understanding, not preachy. Acknowledge life happens.
+Suggest getting back on track with something manageable today.
+Don't guilt trip. Be real and warm. Sound like Coach Alex.`;
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 150,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const message = response.content[0].type === "text" ? response.content[0].text : "";
+    return { show: true, message, daysSince };
+  } catch {
+    return {
+      show: true,
+      message: `Hey ${athleteName} — life gets busy, I get it. Let's get back on track today with something manageable. Even a 20-minute session counts.`,
+      daysSince,
+    };
+  }
+}
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const checkMissed = searchParams.get("check") === "missed";
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const client = process.env.CLAUDE_API_KEY ? new Anthropic({ apiKey: process.env.CLAUDE_API_KEY }) : null;
+
+  // Handle missed workout check separately
+  if (checkMissed) {
+    if (!client) return NextResponse.json({ show: false, message: "", daysSince: 0 });
+    return NextResponse.json(await getMissedWorkoutMessage(userId, client));
+  }
 
   const [profile, sub] = await Promise.all([
     prisma.profile.findUnique({ where: { userId } }),
@@ -31,7 +95,7 @@ export async function GET() {
     return NextResponse.json({ message: sub.morningCheckinMessage, cached: true });
   }
 
-  if (!process.env.CLAUDE_API_KEY) {
+  if (!client) {
     return NextResponse.json({
       message: "Good morning! Today's plan is ready. Let's get after it. 💪",
       cached: false,
@@ -80,9 +144,9 @@ export async function GET() {
     }
   }
 
-  const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
+  const clientForCheckin = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY! });
 
-  const prompt = `You are a world-class hybrid athlete coach. Deliver a personalized morning training brief. Be direct, motivating, specific. Under 100 words. Sound like a real coach.
+  const prompt = `You are Coach Alex — a world-class hybrid athlete coach. Deliver a personalized morning training brief. Be direct, motivating, specific. Under 100 words. Sound like a real coach, not a bot.
 
 Name: ${profile?.name || "Athlete"}
 Today's workout: ${todayWorkout}
@@ -97,7 +161,7 @@ Generate a morning check-in that:
 Keep it punchy. No fluff.`;
 
   try {
-    const response = await client.messages.create({
+    const response = await clientForCheckin.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 200,
       messages: [{ role: "user", content: prompt }],

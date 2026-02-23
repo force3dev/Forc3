@@ -45,16 +45,51 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  return updateProfile(req);
+}
+
+export async function PUT(req: NextRequest) {
+  return updateProfile(req);
+}
+
+async function updateProfile(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
+  const {
+    displayName,
+    username,
+    bio,
+    avatarUrl,
+    ...profileBody
+  } = body || {};
 
-  const profile = await prisma.profile.upsert({
-    where: { userId },
-    update: body,
-    create: { userId, ...body },
-  });
+  if (
+    displayName !== undefined ||
+    username !== undefined ||
+    bio !== undefined ||
+    avatarUrl !== undefined
+  ) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(displayName !== undefined ? { displayName: displayName || null } : {}),
+        ...(username !== undefined ? { username: username || null } : {}),
+        ...(bio !== undefined ? { bio: bio || null } : {}),
+        ...(avatarUrl !== undefined ? { avatarUrl: avatarUrl || null } : {}),
+      },
+    });
+  }
+
+  const hasProfileFields = Object.keys(profileBody).length > 0;
+  const profile = hasProfileFields
+    ? await prisma.profile.upsert({
+        where: { userId },
+        update: profileBody,
+        create: { userId, ...profileBody },
+      })
+    : await prisma.profile.findUnique({ where: { userId } });
 
   return NextResponse.json(profile);
 }

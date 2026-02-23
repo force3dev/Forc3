@@ -22,8 +22,8 @@ async function refreshIfNeeded(user: { stravaAccessToken: string | null; stravaR
   return data.access_token as string;
 }
 
-export async function GET(req: NextRequest) {
-  return POST(req);
+export async function GET(_req: NextRequest) {
+  return POST();
 }
 
 export async function POST() {

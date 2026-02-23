@@ -41,7 +41,7 @@ interface CardioLog {
   completed: boolean;
 }
 
-type AnyLog = WorkoutLog | CardioLog;
+type AnyLog = (WorkoutLog | CardioLog) & { _date?: number };
 type FilterTab = "week" | "month" | "all";
 
 const INTENSITY_DOT: Record<string, string> = {
@@ -103,9 +103,7 @@ export default function HistoryPage() {
         .filter(l => new Date(l.createdAt) >= since)
         .map(l => ({ ...l, _date: new Date(l.createdAt).getTime() })),
     ];
-    return filtered.sort((a, b) =>
-      (b as { _date: number })._date - (a as { _date: number })._date
-    );
+    return filtered.sort((a, b) => (b._date ?? 0) - (a._date ?? 0));
   }, [workoutLogs, cardioLogs, filter]);
 
   // Weekly summaries

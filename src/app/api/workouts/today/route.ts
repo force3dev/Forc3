@@ -146,6 +146,8 @@ export async function GET() {
           secondaryMuscles: we.exercise.secondaryMuscles || "[]",
           formTips: we.exercise.formTips || "[]",
           commonMistakes: we.exercise.commonMistakes || "[]",
+          coachingCues: we.exercise.coachingCues || "[]",
+          alternatives: we.exercise.alternatives || "[]",
           instructions: we.exercise.instructions || null,
           category: we.exercise.category || "strength",
           lastWeight,

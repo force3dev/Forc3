@@ -3,6 +3,18 @@
     {
       "path": "/api/notifications/send-checkin",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/emails/weekly-recap",
+      "schedule": "0 18 * * 0"
+    },
+    {
+      "path": "/api/emails/streak-reminder",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/challenges/generate-weekly",
+      "schedule": "0 0 * * 1"
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { postToFeed } from "@/lib/activity-feed";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,8 @@ export async function POST(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { userId: targetId } = await req.json();
+  const body = await req.json();
+  const targetId = body.targetUserId || body.userId;
   if (!targetId || targetId === userId) {
     return NextResponse.json({ error: "Invalid target" }, { status: 400 });
   }
@@ -62,7 +64,10 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json({ status: "following" });
+  const followerCount = await prisma.follow.count({ where: { followingId: targetId } });
+  await postToFeed(userId, "new_follower", { followerId: userId, targetUserId: targetId });
+
+  return NextResponse.json({ status: "following", followerCount });
 }
 
 // DELETE /api/social/follow — unfollow
@@ -70,7 +75,8 @@ export async function DELETE(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { userId: targetId } = await req.json();
+  const body = await req.json();
+  const targetId = body.targetUserId || body.userId;
   if (!targetId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
   await prisma.follow.deleteMany({
@@ -81,5 +87,6 @@ export async function DELETE(req: NextRequest) {
     where: { senderId: userId, receiverId: targetId },
   });
 
-  return NextResponse.json({ success: true });
+  const followerCount = await prisma.follow.count({ where: { followingId: targetId } });
+  return NextResponse.json({ success: true, followerCount });
 }

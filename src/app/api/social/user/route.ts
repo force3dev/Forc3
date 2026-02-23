@@ -4,17 +4,20 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/social/user?username=handle — get a public user profile
+// GET /api/social/user?username=handle or ?userId=... — get a public user profile
 export async function GET(req: NextRequest) {
   const currentUserId = await getCurrentUserId();
   if (!currentUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const username = searchParams.get("username");
-  if (!username) return NextResponse.json({ error: "username required" }, { status: 400 });
+  const userId = searchParams.get("userId");
+  if (!username && !userId) {
+    return NextResponse.json({ error: "username or userId required" }, { status: 400 });
+  }
 
-  const user = await prisma.user.findUnique({
-    where: { username },
+  const user = await prisma.user.findFirst({
+    where: username ? { username } : { id: userId! },
     select: {
       id: true,
       username: true,
@@ -22,6 +25,7 @@ export async function GET(req: NextRequest) {
       avatarUrl: true,
       bio: true,
       isPrivate: true,
+      streak: { select: { currentStreak: true, level: true } },
       _count: {
         select: {
           followers: true,
@@ -80,6 +84,8 @@ export async function GET(req: NextRequest) {
       followers: user._count.followers,
       following: user._count.following,
       workouts: user._count.workoutLogs,
+      level: user.streak?.level || 1,
+      streak: user.streak?.currentStreak || 0,
     },
     isFollowing,
     isPending,

@@ -4,6 +4,11 @@ import { useRouter, useParams } from "next/navigation";
 import { calculatePlates } from "@/lib/calculations/plateCalculator";
 import WorkoutCompleteScreen from "@/components/shared/WorkoutCompleteScreen";
 import { ExerciseDetailModal } from "@/components/workout/ExerciseDetailModal";
+import { WorkoutShareCard } from "@/components/WorkoutShareCard";
+import { PRShareCard } from "@/components/PRShareCard";
+import { haptics } from "@/lib/haptics";
+import { celebrateWorkout, celebratePR } from "@/lib/confetti";
+import { getVoiceCoach } from "@/lib/voice-coach";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +35,8 @@ interface Exercise {
   secondaryMuscles?: string;
   formTips?: string;
   commonMistakes?: string;
+  coachingCues?: string;
+  alternatives?: string;
   instructions?: string | null;
   category?: string;
   lastWeight: number | null;
@@ -128,28 +135,72 @@ function RestTimer({
 
 // ─── PR Celebration ───────────────────────────────────────────────────────────
 
-function PRCelebration({ prType, onDone }: { prType: "1rm" | "volume" | null; onDone: () => void }) {
+function PRCelebration({
+  prType,
+  exerciseName,
+  weight,
+  reps,
+  previousWeight,
+  onDone,
+}: {
+  prType: "1rm" | "volume" | null;
+  exerciseName?: string;
+  weight?: number;
+  reps?: number;
+  previousWeight?: number;
+  onDone: () => void;
+}) {
+  const [showShare, setShowShare] = useState(false);
+
   useEffect(() => {
-    const t = setTimeout(onDone, 3000);
-    return () => clearTimeout(t);
-  }, [onDone]);
+    celebratePR();
+    haptics.success();
+  }, []);
+
+  if (showShare && exerciseName && weight && reps) {
+    return (
+      <PRShareCard
+        exerciseName={exerciseName}
+        weight={weight}
+        reps={reps}
+        previousWeight={previousWeight}
+        onClose={onDone}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50">
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-4 px-6">
         <div className="text-6xl animate-bounce">🏆</div>
-        <h2 className="text-2xl font-bold text-[#FFB300]">New PR!</h2>
-        <p className="text-neutral-400">
+        <h2 className="text-2xl font-bold text-[#FFB300]">NEW PR!</h2>
+        {exerciseName && (
+          <p className="text-white font-semibold">{exerciseName}</p>
+        )}
+        {weight && reps && (
+          <p className="text-[#FFB300] text-xl font-bold">{weight} lbs × {reps}</p>
+        )}
+        <p className="text-neutral-400 text-sm">
           {prType === "1rm" ? "New estimated 1-rep max!" :
-           prType === "volume" ? "New volume PR — most reps × weight in a set!" :
+           prType === "volume" ? "New single-set volume PR!" :
            "Personal Record Broken!"}
         </p>
-        <button
-          onClick={onDone}
-          className="px-6 py-2 bg-[#FFB300]/20 text-[#FFB300] border border-[#FFB300]/30 rounded-xl text-sm font-semibold"
-        >
-          Let&apos;s go!
-        </button>
+        <div className="flex gap-3 mt-4">
+          <button
+            onClick={onDone}
+            className="flex-1 py-3 border border-[#262626] text-neutral-400 rounded-xl text-sm"
+          >
+            Keep Going
+          </button>
+          {exerciseName && weight && reps && (
+            <button
+              onClick={() => setShowShare(true)}
+              className="flex-[2] py-3 bg-[#FFB300] text-black font-bold rounded-xl text-sm"
+            >
+              Share PR 📤
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -243,9 +294,17 @@ export default function WorkoutPage() {
   const [plateCalcWeight, setPlateCalcWeight] = useState(135);
   const [showPR, setShowPR] = useState(false);
   const [prType, setPrType] = useState<"1rm" | "volume" | null>(null);
+  const [prExercise, setPrExercise] = useState<{ name: string; weight: number; reps: number } | null>(null);
   const [completing, setCompleting] = useState(false);
   const [done, setDone] = useState(false);
   const [demoExercise, setDemoExercise] = useState<Exercise | null>(null);
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("voiceCoachEnabled") !== "false";
+    }
+    return true;
+  });
   const [completionData, setCompletionData] = useState<{
     duration: number;
     totalVolume: number;
@@ -315,6 +374,8 @@ export default function WorkoutPage() {
       const ex = workout.exercises[exIdx];
       const set = ex.loggedSets[setIdx];
 
+      haptics.light();
+
       const res = await fetch("/api/workouts/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -332,13 +393,24 @@ export default function WorkoutPage() {
       const data = await res.json();
       if (data.isPR) {
         setPrType(data.prType || null);
+        setPrExercise({ name: ex.name, weight: set.weight, reps: set.reps });
         setShowPR(true);
       }
 
       updateSet(exIdx, setIdx, { logged: true, isPR: data.isPR });
 
+      // Voice cue for rest period
+      const voice = getVoiceCoach();
+      const restSecs = ex.restSeconds || 120;
+      const isLastSet = setIdx === ex.sets - 1;
+      if (isLastSet) {
+        voice.announceLastSet();
+      } else {
+        voice.announceRestPeriod(restSecs);
+      }
+
       // Start rest timer
-      setTimerSeconds(ex.restSeconds || 120);
+      setTimerSeconds(restSecs);
       setShowTimer(true);
     },
     [workout, logId]
@@ -354,8 +426,11 @@ export default function WorkoutPage() {
         body: JSON.stringify({ action: "complete", logId }),
       });
       const data = await res.json();
+      celebrateWorkout();
+      haptics.success();
+      getVoiceCoach().announceWorkoutComplete();
       setCompletionData({
-        duration: data.duration * 60, // convert minutes to seconds
+        duration: data.duration * 60,
         totalVolume: data.totalVolume,
         prCount: data.prCount || 0,
         newAchievements: data.newAchievements || [],
@@ -391,6 +466,23 @@ export default function WorkoutPage() {
   // ── Done Screen ──────────────────────────────────────────────────────────────
   if (done && completionData) {
     const totalSets = workout.exercises.reduce((s, ex) => s + ex.loggedSets.filter(l => l.logged).length, 0);
+    const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+    if (showShareCard) {
+      return (
+        <WorkoutShareCard
+          workoutName={workout.name}
+          date={dateStr}
+          exerciseCount={workout.exercises.length}
+          totalSets={totalSets}
+          totalVolume={completionData.totalVolume}
+          durationMinutes={Math.round(completionData.duration / 60)}
+          streakDays={0}
+          onClose={() => router.push("/home")}
+        />
+      );
+    }
+
     return (
       <main className="min-h-screen bg-black text-white">
         <WorkoutCompleteScreen
@@ -399,7 +491,7 @@ export default function WorkoutPage() {
           totalSets={totalSets}
           prCount={completionData.prCount}
           newAchievements={completionData.newAchievements}
-          onClose={() => router.push("/home")}
+          onClose={() => setShowShareCard(true)}
         />
       </main>
     );
@@ -419,7 +511,13 @@ export default function WorkoutPage() {
           onDone={() => setShowTimer(false)}
         />
       )}
-      {showPR && <PRCelebration prType={prType} onDone={() => { setShowPR(false); setPrType(null); }} />}
+      {showPR && <PRCelebration
+        prType={prType}
+        exerciseName={prExercise?.name}
+        weight={prExercise?.weight}
+        reps={prExercise?.reps}
+        onDone={() => { setShowPR(false); setPrType(null); setPrExercise(null); }}
+      />}
       {demoExercise && (
         <ExerciseDetailModal
           exercise={{
@@ -430,6 +528,8 @@ export default function WorkoutPage() {
             secondaryMuscles: demoExercise.secondaryMuscles || "[]",
             formTips: demoExercise.formTips || "[]",
             commonMistakes: demoExercise.commonMistakes || "[]",
+            coachingCues: demoExercise.coachingCues || "[]",
+            alternatives: demoExercise.alternatives || "[]",
             instructions: demoExercise.instructions,
             category: demoExercise.category || "strength",
           }}
@@ -457,8 +557,23 @@ export default function WorkoutPage() {
             {completedExercises}/{workout.exercises.length} exercises
           </div>
         </div>
-        <div className="text-xs text-neutral-500 tabular-nums">
-          <ElapsedTime startTime={startTime.current} />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              const vc = getVoiceCoach();
+              const next = !voiceEnabled;
+              setVoiceEnabled(next);
+              vc.setEnabled(next);
+              localStorage.setItem("voiceCoachEnabled", String(next));
+            }}
+            className="text-lg"
+            title={voiceEnabled ? "Voice on" : "Voice off"}
+          >
+            {voiceEnabled ? "🔊" : "🔇"}
+          </button>
+          <div className="text-xs text-neutral-500 tabular-nums">
+            <ElapsedTime startTime={startTime.current} />
+          </div>
         </div>
       </header>
 
@@ -514,6 +629,7 @@ export default function WorkoutPage() {
                   className="w-12 h-12 rounded-xl overflow-hidden bg-[#0a0a0a] border border-[#262626] flex-shrink-0 flex items-center justify-center"
                 >
                   {ex.gifUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={ex.gifUrl} alt={ex.name} className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-xl">💪</span>
@@ -543,6 +659,17 @@ export default function WorkoutPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDemoExercise(ex);
+                      }}
+                      className="w-5 h-5 rounded-full border border-[#303030] text-[10px] text-neutral-300 flex items-center justify-center"
+                      aria-label={`Open ${ex.name} guide`}
+                    >
+                      ?
+                    </button>
                     <span className="text-xs text-neutral-600">
                       {completedSets}/{ex.sets}
                     </span>

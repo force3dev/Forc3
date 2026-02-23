@@ -1,8 +1,10 @@
 "use client";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StravaConnect from "@/components/StravaConnect";
 import PushPermission from "@/components/PushPermission";
+import ReferralDashboard from "@/components/ReferralDashboard";
 
 const SECTIONS = [
   {
@@ -15,6 +17,7 @@ const SECTIONS = [
   {
     title: "Training",
     items: [
+      { label: "Exercise Library", href: "/exercises", icon: "🏋️" },
       { label: "Body Measurements", href: "/progress/measurements", icon: "📏" },
       { label: "Workout History", href: "/history", icon: "📋" },
       { label: "Analytics", href: "/progress/analytics", icon: "📊" },
@@ -30,6 +33,17 @@ const SECTIONS = [
 
 export default function SettingsPage() {
   const router = useRouter();
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+
+  useEffect(() => {
+    setVoiceEnabled(localStorage.getItem("voiceCoachEnabled") !== "false");
+  }, []);
+
+  function toggleVoice() {
+    const next = !voiceEnabled;
+    setVoiceEnabled(next);
+    localStorage.setItem("voiceCoachEnabled", String(next));
+  }
 
   async function handleSignOut() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -72,6 +86,34 @@ export default function SettingsPage() {
           </div>
         ))}
 
+        {/* Voice Coach */}
+        <div>
+          <div className="text-xs text-neutral-500 uppercase tracking-widest mb-2 px-1">Coach</div>
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">{voiceEnabled ? "🔊" : "🔇"}</span>
+                <div>
+                  <div className="text-sm font-medium">Voice Coach</div>
+                  <div className="text-xs text-neutral-500">Audio cues during workouts</div>
+                </div>
+              </div>
+              <button
+                onClick={toggleVoice}
+                className={`w-12 h-6 rounded-full transition-colors relative ${
+                  voiceEnabled ? "bg-[#0066FF]" : "bg-[#333]"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    voiceEnabled ? "translate-x-6" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Strava Connect */}
         <div>
           <div className="text-xs text-neutral-500 uppercase tracking-widest mb-2 px-1">Integrations</div>
@@ -80,6 +122,9 @@ export default function SettingsPage() {
 
         {/* Push notifications */}
         <PushPermission />
+
+        {/* Referral program */}
+        <ReferralDashboard />
 
         {/* Danger zone */}
         <div>

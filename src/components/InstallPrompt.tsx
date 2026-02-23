@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 export default function InstallPrompt() {
   const [show, setShow] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  type BeforeInstallPromptEvent = Event & { prompt(): void; userChoice: Promise<{ outcome: string }> };
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     // Only show on mobile
@@ -29,7 +29,7 @@ export default function InstallPrompt() {
     // Android — listen for beforeinstallprompt
     const handler = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
       setShow(true);
     };
     window.addEventListener("beforeinstallprompt", handler);

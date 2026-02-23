@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
+import Avatar from "@/components/Avatar";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,20 +53,6 @@ function timeAgo(date: string) {
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
-
-function Avatar({ user }: { user: { displayName?: string | null; username?: string | null; avatarUrl?: string | null } }) {
-  return (
-    <div className="w-10 h-10 rounded-full bg-[#0066FF]/20 border border-[#0066FF]/30 flex items-center justify-center overflow-hidden flex-shrink-0">
-      {user.avatarUrl ? (
-        <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
-      ) : (
-        <span className="text-[#0066FF] font-bold text-sm">
-          {(user.displayName || user.username || "?")[0].toUpperCase()}
-        </span>
-      )}
-    </div>
-  );
-}
 
 function ActivityCard({ activity }: { activity: FeedActivity }) {
   const router = useRouter();
@@ -149,7 +136,7 @@ function ActivityCard({ activity }: { activity: FeedActivity }) {
     <div className="px-4 py-4 border-b border-[#1a1a1a]">
       <div className="flex items-start gap-3">
         <button onClick={() => activity.user.username && router.push(`/user/${activity.user.username}`)}>
-          <Avatar user={activity.user} />
+          <Avatar user={{ avatarUrl: activity.user.avatarUrl, name: activity.user.displayName || activity.user.username || "Athlete" }} />
         </button>
         <div className="flex-1 min-w-0">
           {c}
@@ -165,7 +152,7 @@ function UserCard({ user, onFollowToggle }: { user: UserResult; onFollowToggle: 
   return (
     <div className="flex items-center gap-3 py-3">
       <button onClick={() => user.username && router.push(`/user/${user.username}`)}>
-        <Avatar user={user} />
+        <Avatar user={{ avatarUrl: user.avatarUrl, name: user.displayName || user.username || "Athlete" }} />
       </button>
       <div className="flex-1 min-w-0" onClick={() => user.username && router.push(`/user/${user.username}`)}>
         <div className="font-semibold text-sm truncate">{user.displayName || user.username}</div>
@@ -195,7 +182,7 @@ function WorkoutCard({ workout }: { workout: TrendingWorkout }) {
       onClick={() => router.push(`/user/${workout.user.username}`)}
     >
       <div className="flex items-center gap-2 mb-3">
-        <Avatar user={workout.user} />
+        <Avatar user={{ avatarUrl: workout.user.avatarUrl, name: workout.user.displayName || workout.user.username || "Athlete" }} />
         <div>
           <div className="text-sm font-semibold">{workout.user.displayName || workout.user.username}</div>
           <div className="text-xs text-neutral-500">{workout.user.username ? `@${workout.user.username}` : ""}</div>
