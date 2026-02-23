@@ -22,6 +22,7 @@ async function refreshIfNeeded(user: { stravaAccessToken: string | null; stravaR
   return data.access_token as string;
 }
 
+// GET supports both GET and POST for the same sync operation (e.g. called from StravaFeed)
 export async function GET() {
   return POST();
 }
