@@ -4,6 +4,12 @@ import { useRouter } from "next/navigation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface RaceGoal {
+  type: string;
+  date?: string;
+  priority: "a" | "b";
+}
+
 interface OnboardingData {
   // Screen 2: Goal
   goal: string;
@@ -17,7 +23,11 @@ interface OnboardingData {
   injuries: string[];
   // Screen 7: Sport
   sport: string;
-  // Screen 8: Body Stats
+  // Screen 8: Race/Event Goals (NEW)
+  raceGoals: RaceGoal[];
+  raceDate: string;
+  trainingVolume: string;
+  // Screen 9: Body Stats
   name: string;
   age: number;
   gender: string;
@@ -26,7 +36,7 @@ interface OnboardingData {
   unitSystem: "imperial" | "metric";
   heightFt: number;
   heightIn: number;
-  // Screen 9: Goal Description (free-text)
+  // Screen 10: Goal Description (free-text)
   goalDescription: string;
 }
 
@@ -58,6 +68,9 @@ export default function OnboardingPage() {
     equipment: "",
     injuries: [],
     sport: "",
+    raceGoals: [],
+    raceDate: "",
+    trainingVolume: "",
     name: "",
     age: 25,
     gender: "male",
@@ -69,7 +82,7 @@ export default function OnboardingPage() {
     goalDescription: "",
   });
 
-  const totalSteps = 11;
+  const totalSteps = 12;
 
   const update = (patch: Partial<OnboardingData>) =>
     setData(prev => ({ ...prev, ...patch }));
@@ -96,11 +109,23 @@ export default function OnboardingPage() {
       case 5: return !!data.equipment;
       case 6: return true; // skippable
       case 7: return true; // skippable
-      case 8: return data.age > 0 && data.weight > 0 && !!data.gender;
-      case 9: return true; // skippable free-text
-      case 10: return false; // calculating screen handles its own transition
+      case 8: return true; // race goals skippable
+      case 9: return data.age > 0 && data.weight > 0 && !!data.gender;
+      case 10: return true; // skippable free-text
+      case 11: return false; // calculating screen handles its own transition
       default: return true;
     }
+  };
+
+  const toggleRaceGoal = (type: string) => {
+    setData(prev => {
+      const exists = prev.raceGoals.some(r => r.type === type);
+      if (exists) {
+        return { ...prev, raceGoals: prev.raceGoals.filter(r => r.type !== type) };
+      } else {
+        return { ...prev, raceGoals: [...prev.raceGoals, { type, priority: "a" }] };
+      }
+    });
   };
 
   const handleSubmit = async () => {
@@ -115,6 +140,12 @@ export default function OnboardingPage() {
         : data.height;
 
     try {
+      // Attach race date to each goal if date was provided
+      const raceGoalsWithDate = data.raceGoals.map(r => ({
+        ...r,
+        date: data.raceDate || undefined,
+      }));
+
       const res = await fetch("/api/user/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -132,6 +163,8 @@ export default function OnboardingPage() {
           injuries: data.injuries,
           sport: data.sport || null,
           unitSystem: data.unitSystem,
+          raceGoals: raceGoalsWithDate,
+          trainingVolume: data.trainingVolume || null,
         }),
       });
 
@@ -140,10 +173,10 @@ export default function OnboardingPage() {
       if (!res.ok) throw new Error(result.error || "Failed");
 
       setPlanResult(result);
-      setStep(11);
+      setStep(12);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
-      setStep(8); // go back to stats
+      setStep(9); // go back to stats
     } finally {
       setCalculating(false);
     }
@@ -151,7 +184,7 @@ export default function OnboardingPage() {
 
   // Auto-advance through calculating screen
   useEffect(() => {
-    if (step === 10) {
+    if (step === 11) {
       const timer = setTimeout(() => {
         handleSubmit();
       }, 2800);
@@ -171,7 +204,7 @@ export default function OnboardingPage() {
 
   // ─── Render Screens ─────────────────────────────────────────────────────────
 
-  if (step === 11 && planResult) {
+  if (step === 12 && planResult) {
     const splits: Record<string, string> = {
       ppl: "Push / Pull / Legs",
       upper_lower: "Upper / Lower",
@@ -228,7 +261,7 @@ export default function OnboardingPage() {
     );
   }
 
-  if (step === 10) {
+  if (step === 11) {
     const messages = [
       "Analyzing your profile...",
       "Selecting optimal exercises...",
@@ -512,8 +545,100 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* ── Screen 8: Body Stats ──────────────────────────────────────── */}
+          {/* ── Screen 8: Race / Event Goals ──────────────────────────────── */}
           {step === 8 && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-2xl font-bold">Do you have any upcoming races or events?</h1>
+                <p className="text-neutral-500 text-sm mt-1">Select all that apply — we&apos;ll build your cardio around them. Skippable.</p>
+              </div>
+              <div className="space-y-2">
+                {[
+                  { key: "5k_10k", label: "5K / 10K", icon: "🏃" },
+                  { key: "half_marathon", label: "Half Marathon", icon: "🏃" },
+                  { key: "full_marathon", label: "Full Marathon", icon: "🏃" },
+                  { key: "swim_race", label: "Swim Meet / Open Water Race", icon: "🏊" },
+                  { key: "cycling_race", label: "Cycling Race / Gran Fondo", icon: "🚴" },
+                  { key: "sprint_tri", label: "Sprint Triathlon", icon: "🏊🚴🏃" },
+                  { key: "olympic_tri", label: "Olympic Triathlon", icon: "🏊🚴🏃" },
+                  { key: "half_ironman", label: "Half Ironman (70.3)", icon: "🏊🚴🏃" },
+                  { key: "full_ironman", label: "Full Ironman", icon: "🏊🚴🏃" },
+                  { key: "ocr", label: "Spartan / OCR Race", icon: "🧱" },
+                  { key: "powerlifting", label: "Powerlifting / Weightlifting Meet", icon: "💪" },
+                ].map(opt => {
+                  const selected = data.raceGoals.some(r => r.type === opt.key);
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => toggleRaceGoal(opt.key)}
+                      className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+                        selected
+                          ? "bg-[#0066FF]/10 border-[#0066FF] text-white"
+                          : "bg-[#0a0a0a] border-[#262626] hover:border-neutral-600"
+                      }`}
+                    >
+                      <span className="text-base">{opt.icon}</span>
+                      <span className="font-medium text-sm">{opt.label}</span>
+                      {selected && <span className="ml-auto text-[#0066FF] text-sm">✓</span>}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => update({ raceGoals: [], raceDate: "", trainingVolume: "" })}
+                  className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+                    data.raceGoals.length === 0
+                      ? "bg-[#0066FF]/10 border-[#0066FF] text-white"
+                      : "bg-[#0a0a0a] border-[#262626] hover:border-neutral-600"
+                  }`}
+                >
+                  <span className="text-base">🎯</span>
+                  <span className="font-medium text-sm">None right now</span>
+                  {data.raceGoals.length === 0 && <span className="ml-auto text-[#0066FF] text-sm">✓</span>}
+                </button>
+              </div>
+
+              {/* If races selected: date + volume */}
+              {data.raceGoals.length > 0 && (
+                <div className="space-y-4 pt-2 border-t border-[#262626]">
+                  <div>
+                    <label className="text-sm text-neutral-400">When is your earliest race?</label>
+                    <input
+                      type="date"
+                      value={data.raceDate}
+                      onChange={e => update({ raceDate: e.target.value })}
+                      className="mt-2 w-full p-4 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:border-[#0066FF] focus:outline-none transition-colors text-white [color-scheme:dark]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-neutral-400">Current weekly training volume</label>
+                    <div className="mt-2 space-y-2">
+                      {[
+                        { key: "beginner", label: "Beginner", desc: "0–3 hrs/week" },
+                        { key: "intermediate", label: "Intermediate", desc: "4–8 hrs/week" },
+                        { key: "advanced", label: "Advanced", desc: "8+ hrs/week" },
+                      ].map(opt => (
+                        <button
+                          key={opt.key}
+                          onClick={() => update({ trainingVolume: opt.key })}
+                          className={`w-full p-3.5 rounded-xl border text-left transition-all flex justify-between items-center ${
+                            data.trainingVolume === opt.key
+                              ? "bg-[#0066FF]/10 border-[#0066FF]"
+                              : "bg-[#0a0a0a] border-[#262626] hover:border-neutral-600"
+                          }`}
+                        >
+                          <span className="font-medium text-sm">{opt.label}</span>
+                          <span className={`text-xs ${data.trainingVolume === opt.key ? "text-[#0066FF]" : "text-neutral-500"}`}>{opt.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Screen 9: Body Stats ──────────────────────────────────────── */}
+          {step === 9 && (
             <div className="space-y-6">
               <div>
                 <h1 className="text-2xl font-bold">Your body stats</h1>
@@ -648,8 +773,8 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* ── Screen 9: Goal Description (free-text) ────────────────────── */}
-          {step === 9 && (
+          {/* ── Screen 10: Goal Description (free-text) ───────────────────── */}
+          {step === 10 && (
             <div className="space-y-6">
               <div>
                 <h1 className="text-2xl font-bold">Tell us more about your goal</h1>
@@ -676,10 +801,10 @@ export default function OnboardingPage() {
         </div>
 
         {/* Nav buttons */}
-        {step !== 10 && step !== 11 && (
+        {step !== 11 && step !== 12 && (
           <div className="pt-6 pb-4">
             <button
-              onClick={step === 9 ? () => setStep(10) : next}
+              onClick={step === 10 ? () => setStep(11) : next}
               disabled={!canProceed() || loading}
               className={`w-full py-4 font-bold rounded-xl transition-all ${
                 canProceed() && !loading
@@ -687,7 +812,7 @@ export default function OnboardingPage() {
                   : "bg-[#0a0a0a] text-neutral-600 cursor-not-allowed border border-[#262626]"
               }`}
             >
-              {step === 9 ? "Build My Plan" : step === 1 ? "Let's Go →" : "Continue"}
+              {step === 10 ? "Build My Plan" : step === 1 ? "Let's Go →" : "Continue"}
             </button>
           </div>
         )}

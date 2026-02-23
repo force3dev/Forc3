@@ -208,7 +208,7 @@ export default function CoachPage() {
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-sm text-red-400">
             {error}
-            {error.includes("ANTHROPIC_API_KEY") && (
+            {error.includes("CLAUDE_API_KEY") && (
               <div className="mt-2 text-xs text-neutral-500">
                 Add your API key to .env to enable the AI coach.
               </div>

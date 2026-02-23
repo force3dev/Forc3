@@ -159,7 +159,7 @@ export async function GET() {
 
     // Generate AI coaching notes (non-blocking — skip if no API key)
     let coachingNotes: string[] = [];
-    if (process.env.ANTHROPIC_API_KEY) {
+    if (process.env.CLAUDE_API_KEY) {
       try {
         coachingNotes = await generateWorkoutNotes(
           userId,

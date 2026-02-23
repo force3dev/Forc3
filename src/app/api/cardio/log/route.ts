@@ -11,6 +11,9 @@ export async function POST(req: NextRequest) {
   const {
     type,
     sport,
+    title,
+    description,
+    intensity,
     duration,
     distance,
     pace,
@@ -31,6 +34,9 @@ export async function POST(req: NextRequest) {
       userId,
       type,
       sport: sport || null,
+      title: title || null,
+      description: description || null,
+      intensity: intensity || null,
       duration: Math.round(duration),
       distance: distance || null,
       pace: pace || null,
@@ -40,6 +46,8 @@ export async function POST(req: NextRequest) {
       routeData: routeData || null,
       intervals: intervals || null,
       notes: notes || null,
+      completed: true,
+      completedAt: new Date(),
     },
   });
 
@@ -69,7 +77,7 @@ export async function GET() {
   const activities = await prisma.cardioActivity.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    take: 30,
+    take: 100,
   });
 
   return NextResponse.json({ activities });

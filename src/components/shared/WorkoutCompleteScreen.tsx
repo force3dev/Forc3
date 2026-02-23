@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 interface Props {
   duration: number; // seconds
@@ -11,105 +11,42 @@ interface Props {
 }
 
 export default function WorkoutCompleteScreen({
-  duration,
-  totalVolume,
-  totalSets,
   prCount,
   newAchievements = [],
   onClose,
 }: Props) {
-  const firedRef = useRef(false);
-
+  // Auto-dismiss after 2 seconds
   useEffect(() => {
-    if (firedRef.current) return;
-    firedRef.current = true;
-
-    // Dynamically load canvas-confetti
-    import("canvas-confetti").then(({ default: confetti }) => {
-      const duration = 3000;
-      const end = Date.now() + duration;
-
-      const frame = () => {
-        confetti({
-          particleCount: 3,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0 },
-          colors: ["#0066FF", "#00C853", "#FFB300"],
-        });
-        confetti({
-          particleCount: 3,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1 },
-          colors: ["#0066FF", "#00C853", "#FFB300"],
-        });
-        if (Date.now() < end) requestAnimationFrame(frame);
-      };
-      frame();
-    });
-  }, []);
-
-  const mins = Math.floor(duration / 60);
-  const secs = duration % 60;
+    const t = setTimeout(onClose, 2000);
+    return () => clearTimeout(t);
+  }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center px-6 text-center">
-      <div className="text-6xl mb-4">🏆</div>
-      <h1 className="text-3xl font-bold mb-2">Workout Complete!</h1>
-      <p className="text-neutral-400 mb-8">Great work — keep showing up</p>
+    <div className="fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
+      <div className="bg-[#141414] border border-[#00C853]/40 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-lg shadow-black/60">
+        {/* Green checkmark */}
+        <div className="w-10 h-10 rounded-full bg-[#00C853]/20 border border-[#00C853]/50 flex items-center justify-center flex-shrink-0">
+          <svg className="w-5 h-5 text-[#00C853]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 w-full max-w-sm mb-8">
-        <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4">
-          <div className="text-2xl font-bold tabular-nums">{mins}:{String(secs).padStart(2, "0")}</div>
-          <div className="text-xs text-neutral-500 mt-1">Duration</div>
-        </div>
-        <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4">
-          <div className="text-2xl font-bold tabular-nums">
-            {totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}k` : totalVolume}
-          </div>
-          <div className="text-xs text-neutral-500 mt-1">lbs lifted</div>
-        </div>
-        <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4">
-          <div className="text-2xl font-bold tabular-nums">{totalSets}</div>
-          <div className="text-xs text-neutral-500 mt-1">Sets done</div>
-        </div>
-      </div>
-
-      {/* PRs */}
-      {prCount > 0 && (
-        <div className="mb-6 px-5 py-3 bg-[#FFB300]/10 border border-[#FFB300]/30 rounded-2xl">
-          <p className="text-[#FFB300] font-bold">
-            🎯 {prCount} new personal record{prCount !== 1 ? "s" : ""}!
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-white">Workout Complete! 💪</p>
+          <p className="text-xs text-neutral-400 mt-0.5">
+            {prCount > 0 ? `${prCount} new PR${prCount !== 1 ? "s" : ""}` : "Great work — keep showing up"}
+            {newAchievements.length > 0 ? ` · ${newAchievements.length} achievement${newAchievements.length !== 1 ? "s" : ""}` : ""}
           </p>
         </div>
-      )}
 
-      {/* New achievements */}
-      {newAchievements.length > 0 && (
-        <div className="w-full max-w-sm mb-6">
-          <p className="text-sm text-neutral-400 mb-3">New achievements unlocked!</p>
-          <div className="space-y-2">
-            {newAchievements.map(a => (
-              <div key={a.name} className="flex items-center gap-3 bg-[#141414] border border-[#262626] rounded-xl p-3">
-                <span className="text-2xl">{a.icon}</span>
-                <div className="flex-1 text-left">
-                  <div className="font-semibold text-sm">{a.name}</div>
-                </div>
-                <div className="text-[#FFB300] text-sm font-bold">+{a.xpReward} XP</div>
-              </div>
-            ))}
-          </div>
+        {/* Progress bar */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 rounded-b-2xl overflow-hidden">
+          <div
+            className="h-full bg-[#00C853] animate-shrink"
+            style={{ animationDuration: "2s", animationTimingFunction: "linear" }}
+          />
         </div>
-      )}
-
-      <button
-        onClick={onClose}
-        className="w-full max-w-sm py-4 bg-[#0066FF] text-white font-bold rounded-2xl hover:bg-[#0052CC] transition-colors"
-      >
-        Done
-      </button>
+      </div>
     </div>
   );
 }

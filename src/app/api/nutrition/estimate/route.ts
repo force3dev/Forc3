@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.CLAUDE_API_KEY) {
     return NextResponse.json({ error: "AI not configured" }, { status: 503 });
   }
 

@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
       injuries,    // string[]
       sport,
       unitSystem,
+      raceGoals,   // array of {type, date, priority}
+      trainingVolume, // "beginner" | "intermediate" | "advanced"
     } = await req.json();
 
     // Calculate nutrition
@@ -70,6 +72,8 @@ export async function POST(req: NextRequest) {
           targetCarbs: macros.carbs,
           targetFat: macros.fat,
           onboardingDone: true,
+          raceGoals: raceGoals?.length ? raceGoals : undefined,
+          trainingVolume: trainingVolume || null,
         },
         create: {
           userId,
@@ -93,6 +97,8 @@ export async function POST(req: NextRequest) {
           targetCarbs: macros.carbs,
           targetFat: macros.fat,
           onboardingDone: true,
+          raceGoals: raceGoals?.length ? raceGoals : undefined,
+          trainingVolume: trainingVolume || null,
         },
       });
 

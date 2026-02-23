@@ -392,14 +392,16 @@ export default function WorkoutPage() {
   if (done && completionData) {
     const totalSets = workout.exercises.reduce((s, ex) => s + ex.loggedSets.filter(l => l.logged).length, 0);
     return (
-      <WorkoutCompleteScreen
-        duration={completionData.duration}
-        totalVolume={completionData.totalVolume}
-        totalSets={totalSets}
-        prCount={completionData.prCount}
-        newAchievements={completionData.newAchievements}
-        onClose={() => router.push("/dashboard")}
-      />
+      <main className="min-h-screen bg-black text-white">
+        <WorkoutCompleteScreen
+          duration={completionData.duration}
+          totalVolume={completionData.totalVolume}
+          totalSets={totalSets}
+          prCount={completionData.prCount}
+          newAchievements={completionData.newAchievements}
+          onClose={() => router.push("/home")}
+        />
+      </main>
     );
   }
 

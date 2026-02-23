@@ -14,10 +14,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Message required" }, { status: 400 });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.CLAUDE_API_KEY) {
     return NextResponse.json({
       error: "Coach not configured",
-      message: "Add ANTHROPIC_API_KEY to .env to enable the AI coach.",
+      message: "Add CLAUDE_API_KEY to .env.local to enable the AI coach.",
     }, { status: 503 });
   }
 

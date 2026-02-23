@@ -1,11 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
+import { generateHybridWeek, formatHybridWeekForCoach } from "@/lib/program-generator";
 
 // ─── Client ───────────────────────────────────────────────────────────────────
 
 function getClient() {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error("ANTHROPIC_API_KEY not set");
+  const key = process.env.CLAUDE_API_KEY;
+  if (!key) throw new Error("CLAUDE_API_KEY not set");
   return new Anthropic({ apiKey: key });
 }
 
@@ -20,6 +21,22 @@ export interface CoachContext {
 
 async function getUserProfile(userId: string) {
   return prisma.profile.findUnique({ where: { userId } });
+}
+
+function formatRaceGoals(raceGoals: unknown): string {
+  if (!raceGoals || !Array.isArray(raceGoals) || raceGoals.length === 0) return "";
+  const today = new Date();
+  const lines = raceGoals.map((r: { type?: string; date?: string }) => {
+    const label = r.type?.replace(/_/g, " ") || "event";
+    if (r.date) {
+      const raceDate = new Date(r.date);
+      const daysOut = Math.max(0, Math.round((raceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+      const weeksOut = Math.round(daysOut / 7);
+      return `${label} — ${weeksOut} weeks away (${raceDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })})`;
+    }
+    return label;
+  });
+  return lines.join(", ");
 }
 
 async function getRecentWorkouts(userId: string, days: number) {
@@ -105,6 +122,27 @@ async function buildCoachSystemPrompt(userId: string): Promise<string> {
     getCurrentPlan(userId),
   ]);
 
+  const raceGoalsStr = formatRaceGoals(profile?.raceGoals);
+  const hasRaces = !!raceGoalsStr;
+
+  // Calculate days to earliest race
+  let raceTaperNote = "";
+  if (profile?.raceGoals && Array.isArray(profile.raceGoals)) {
+    const datesGoals = (profile.raceGoals as { type?: string; date?: string }[])
+      .filter(r => r.date)
+      .map(r => ({ type: r.type, days: Math.max(0, Math.round((new Date(r.date!).getTime() - Date.now()) / 86400000)) }))
+      .sort((a, b) => a.days - b.days);
+
+    if (datesGoals.length > 0) {
+      const next = datesGoals[0];
+      if (next.days <= 21) {
+        raceTaperNote = `\n⚠️ TAPER ALERT: Only ${next.days} days until ${next.type?.replace(/_/g, " ")}. Recommend reducing volume 40-60%, maintaining some race-pace work, prioritizing sleep and fueling.`;
+      } else if (next.days <= 42) {
+        raceTaperNote = `\nRACE APPROACHING: ${next.days} days to ${next.type?.replace(/_/g, " ")}. Begin building race-specific fitness, practice race nutrition, reduce junk volume.`;
+      }
+    }
+  }
+
   return `You are FORC3 AI Coach — a world-class personal trainer and nutrition coach with PhD-level expertise in exercise science and sports nutrition.
 
 ## YOUR CLIENT
@@ -115,6 +153,7 @@ Training days: ${profile?.trainingDays || 4}/week
 Equipment: ${profile?.equipment || "full_gym"}
 Injuries/Limitations: ${profile?.injuries ? JSON.parse(profile.injuries).join(", ") || "None" : "None"}
 ${profile?.sport ? `Sport focus: ${profile.sport}` : ""}
+${hasRaces ? `\n## RACE / EVENT GOALS\nThis athlete is training for: ${raceGoalsStr}\nPrioritize sport-specific cardio programming and taper appropriately as the race approaches.${raceTaperNote}` : ""}
 
 Stats:
 - Weight: ${profile?.weight ? `${profile.weight} ${profile?.unitSystem === "imperial" ? "lbs" : "kg"}` : "not set"}
@@ -123,6 +162,24 @@ Stats:
 
 ## CURRENT TRAINING PLAN
 ${plan ? `${plan.name} — ${plan.split} split\nWeek ${plan.currentWeek} of mesocycle\n${plan.currentPhase ? `Phase: ${plan.currentPhase}` : ""}` : "No plan yet — help them set one up."}
+
+## HYBRID WEEKLY SCHEDULE
+${(() => {
+  try {
+    if (!profile) return "No profile data available.";
+    const hybridPlan = generateHybridWeek({
+      goal: profile.goal || "general",
+      experienceLevel: profile.experienceLevel || "intermediate",
+      trainingDays: profile.trainingDays || 4,
+      sport: profile.sport || undefined,
+      raceGoals: Array.isArray(profile.raceGoals) ? profile.raceGoals as { type: string; date?: string }[] : [],
+      trainingVolume: profile.trainingVolume || "intermediate",
+    });
+    return formatHybridWeekForCoach(hybridPlan);
+  } catch {
+    return "Hybrid schedule unavailable.";
+  }
+})()}
 
 ## RECENT PERFORMANCE (Last 2 weeks)
 ${formatRecentWorkouts(workouts)}
@@ -137,6 +194,7 @@ ${formatRecentNutrition(nutrition)}
 - Motivating without being cheesy
 - Specific: "add 5 lbs to your bench press" not "try going heavier"
 - Flag concerning patterns (overtraining signs, undereating, etc.)
+${hasRaces ? "- Reference their upcoming race when giving advice — connect today's training to their race goal" : ""}
 
 ## RULES
 1. Always reference their actual data when giving advice

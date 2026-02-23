@@ -5,6 +5,7 @@ import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
 import PullToRefreshWrapper from "@/components/shared/PullToRefreshWrapper";
 import WeeklySummaryPopup from "@/components/shared/WeeklySummaryPopup";
+import CardioBlock from "@/components/cardio/CardioBlock";
 
 interface ExercisePreview {
   id: string;
@@ -31,6 +32,12 @@ interface TodayData {
   inProgressLog: string | null;
 }
 
+interface RaceGoal {
+  type: string;
+  date?: string;
+  priority?: string;
+}
+
 interface NutritionData {
   totals: { calories: number; protein: number; carbs: number; fat: number };
   targets: { calories: number; protein: number; carbs: number; fat: number };
@@ -42,6 +49,7 @@ export default function HomePage() {
   const [today, setToday] = useState<TodayData | null>(null);
   const [nutrition, setNutrition] = useState<NutritionData | null>(null);
   const [streak, setStreak] = useState(0);
+  const [raceCountdown, setRaceCountdown] = useState<{ label: string; days: number } | null>(null);
 
   async function load() {
     try {
@@ -63,6 +71,20 @@ export default function HomePage() {
       if (profileRes.ok) {
         const profData = await profileRes.json();
         setStreak(profData.streak?.currentStreak || 0);
+
+        // Compute race countdown from profile raceGoals
+        const goals: RaceGoal[] = profData.profile?.raceGoals || [];
+        if (goals.length > 0) {
+          const now = Date.now();
+          const nearest = goals
+            .filter((r: RaceGoal) => r.date)
+            .map((r: RaceGoal) => ({
+              label: r.type.replace(/_/g, " "),
+              days: Math.max(0, Math.round((new Date(r.date!).getTime() - now) / 86400000)),
+            }))
+            .sort((a, b) => a.days - b.days)[0];
+          if (nearest) setRaceCountdown(nearest);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -114,6 +136,20 @@ export default function HomePage() {
       </header>
 
       <div className="px-6 space-y-5">
+        {/* RACE COUNTDOWN BADGE */}
+        {raceCountdown && (
+          <div className="bg-[#0066FF]/10 border border-[#0066FF]/30 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🏁</span>
+              <span className="text-sm font-medium capitalize">{raceCountdown.label}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-[#0066FF] font-bold text-lg">{raceCountdown.days}</span>
+              <span className="text-neutral-500 text-xs ml-1">days out</span>
+            </div>
+          </div>
+        )}
+
         {/* TODAY'S WORKOUT */}
         {today?.isRestDay ? (
           <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 text-center space-y-3">
@@ -181,6 +217,9 @@ export default function HomePage() {
             </div>
           </div>
         )}
+
+        {/* CARDIO BLOCK */}
+        <CardioBlock />
 
         {/* NUTRITION CARD */}
         {nutrition && (

@@ -82,6 +82,10 @@ model Profile {
   // Preferences
   unitSystem String @default("imperial") // imperial or metric
 
+  // Race / Event Goals
+  raceGoals      Json?    // array of {type, date, priority}
+  trainingVolume String?  // "beginner", "intermediate", "advanced"
+
   // Onboarding state
   onboardingDone  Boolean @default(false)
   goalDescription String?
@@ -589,17 +593,23 @@ model CardioActivity {
   id           String   @id @default(cuid())
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type         String   // running, cycling, swimming, hiit, rowing, jump_rope, elliptical, walking, stair_climber, sports
+  type         String   // run, swim, bike, row, sprint, hiit, walking, jump_rope, elliptical, stair_climber, sports
   sport        String?
-  duration     Int      // seconds
+  title        String?  // e.g. "400m Sprint Intervals"
+  description  String?  // full instructions
+  intensity    String?  // "easy", "moderate", "hard", "max"
+  date         DateTime?
+  duration     Int      // seconds (logged) or minutes (planned)
   distance     Float?
   pace         Float?
   calories     Float?
   avgHeartRate Int?
   maxHeartRate Int?
   routeData    Json?
-  intervals    Json?
+  intervals    Json?    // optional structured interval data
   notes        String?
+  completed    Boolean  @default(false)
+  completedAt  DateTime?
   createdAt    DateTime @default(now())
 
   @@index([userId])
