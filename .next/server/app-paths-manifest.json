@@ -1,1 +1,7 @@
-{}
+{
+  "/plan/page": "app/plan/page.js",
+  "/workout/cardio/[type]/page": "app/workout/cardio/[type]/page.js",
+  "/profile/page": "app/profile/page.js",
+  "/workout/create/page": "app/workout/create/page.js",
+  "/coach/page": "app/coach/page.js"
+}

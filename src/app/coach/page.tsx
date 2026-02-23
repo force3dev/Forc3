@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/shared/BottomNav";
+import PremiumGate from "@/components/PremiumGate";
 
 interface Message {
   id: string;
@@ -61,6 +62,8 @@ export default function CoachPage() {
   const [loading, setLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [remaining, setRemaining] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +117,11 @@ export default function CoachPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.error === "limit_reached") {
+          setMessages(prev => prev.slice(0, -1));
+          setShowUpgrade(true);
+          return;
+        }
         setError(data.message || data.error || "Coach unavailable");
         setMessages(prev => prev.slice(0, -1));
         return;
@@ -125,6 +133,7 @@ export default function CoachPage() {
         content: data.response,
       };
       setMessages(prev => [...prev, coachMsg]);
+      if (typeof data.remaining === "number") setRemaining(data.remaining);
     } catch {
       setError("Network error — check your connection");
       setMessages(prev => prev.slice(0, -1));
@@ -144,12 +153,22 @@ export default function CoachPage() {
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col pb-20">
+      {showUpgrade && (
+        <PremiumGate
+          feature="Unlimited AI Coaching"
+          onClose={() => setShowUpgrade(false)}
+        />
+      )}
       {/* Header */}
       <header className="px-5 pt-6 pb-3 border-b border-[#1a1a1a] flex items-center justify-between flex-shrink-0">
         <div>
           <div className="text-xs font-bold tracking-widest text-[#0066FF]">FORC3</div>
           <h1 className="text-xl font-bold">AI Coach</h1>
-          <p className="text-xs text-neutral-500">Personalized — knows your data</p>
+          {remaining !== null && remaining <= 1 ? (
+            <p className="text-xs text-amber-400">{remaining} free message left today</p>
+          ) : (
+            <p className="text-xs text-neutral-500">Personalized — knows your data</p>
+          )}
         </div>
         {messages.length > 0 && (
           <button

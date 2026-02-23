@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/shared/BottomNav";
+import ProgressPhotoUpload from "@/components/ProgressPhotoUpload";
+import ProgressPhotoGallery from "@/components/ProgressPhotoGallery";
 
 function WorkoutCalendar() {
   const [workoutDates, setWorkoutDates] = useState<Set<string>>(new Set());
@@ -116,6 +118,8 @@ interface Achievement {
 
 export default function ProgressPage() {
   const router = useRouter();
+  const [tab, setTab] = useState<"stats" | "photos">("stats");
+  const [galleryKey, setGalleryKey] = useState(0);
   const [byExercise, setByExercise] = useState<PRGroup>({});
   const [workoutStats, setWorkoutStats] = useState<{
     totalWorkouts: number;
@@ -209,6 +213,30 @@ export default function ProgressPage() {
         <h1 className="text-2xl font-bold mt-1">Progress</h1>
         <p className="text-sm text-neutral-500">Your performance data</p>
       </header>
+
+      {/* Tab bar */}
+      <div className="px-6 mb-4">
+        <div className="flex bg-[#141414] border border-[#262626] rounded-xl p-1 gap-1">
+          {(["stats", "photos"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                tab === t ? "bg-[#0066FF] text-white" : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              {t === "photos" ? "📸 Photos" : "📊 Stats"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === "photos" ? (
+        <div className="px-6 space-y-4">
+          <ProgressPhotoUpload onUploaded={() => setGalleryKey(k => k + 1)} />
+          <ProgressPhotoGallery key={galleryKey} />
+        </div>
+      ) : (
 
       <div className="px-6 space-y-5">
         {/* Stats Summary */}
@@ -367,6 +395,7 @@ export default function ProgressPage() {
           )}
         </div>
       </div>
+      )} {/* end tab === stats */}
 
       <BottomNav active="profile" />
     </main>

@@ -5,6 +5,11 @@ import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
 import PullToRefreshWrapper from "@/components/shared/PullToRefreshWrapper";
 import WeeklySummaryPopup from "@/components/shared/WeeklySummaryPopup";
+import CardioBlock from "@/components/cardio/CardioBlock";
+import MorningCheckin from "@/components/MorningCheckin";
+import RecoveryScore from "@/components/RecoveryScore";
+import HealthCheckin from "@/components/HealthCheckin";
+import StravaFeed from "@/components/StravaFeed";
 
 interface ExercisePreview {
   id: string;
@@ -42,13 +47,16 @@ export default function DashboardPage() {
   const [today, setToday] = useState<TodayData | null>(null);
   const [nutrition, setNutrition] = useState<NutritionData | null>(null);
   const [streak, setStreak] = useState(0);
+  const [isPremium, setIsPremium] = useState(false);
+  const [messageUsed, setMessageUsed] = useState(false);
 
   async function load() {
     try {
-      const [todayRes, nutritionRes, profileRes] = await Promise.all([
+      const [todayRes, nutritionRes, profileRes, limitRes] = await Promise.all([
         fetch("/api/workouts/today"),
         fetch("/api/nutrition"),
         fetch("/api/user/profile"),
+        fetch("/api/coach/check-limit"),
       ]);
 
       const todayData = await todayRes.json();
@@ -63,6 +71,13 @@ export default function DashboardPage() {
       if (profileRes.ok) {
         const profData = await profileRes.json();
         setStreak(profData.streak?.currentStreak || 0);
+        const tier = profData.subscription?.tier || "free";
+        setIsPremium(tier !== "free");
+      }
+
+      if (limitRes.ok) {
+        const limitData = await limitRes.json();
+        setMessageUsed(limitData.remaining === 0);
       }
     } catch (err) {
       console.error(err);
@@ -114,6 +129,15 @@ export default function DashboardPage() {
       </header>
 
       <div className="px-6 space-y-5">
+        {/* HEALTH CHECK-IN — appears first thing in morning */}
+        <HealthCheckin />
+
+        {/* MORNING CHECK-IN */}
+        <MorningCheckin isPremium={isPremium} messageUsed={messageUsed} />
+
+        {/* RECOVERY SCORE */}
+        <RecoveryScore isPremium={isPremium} />
+
         {/* TODAY'S WORKOUT */}
         {today?.isRestDay ? (
           <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 text-center space-y-3">
@@ -167,6 +191,12 @@ export default function DashboardPage() {
             </div>
           </div>
         ) : null}
+
+        {/* TODAY'S CARDIO */}
+        <CardioBlock />
+
+        {/* STRAVA ACTIVITY FEED */}
+        <StravaFeed />
 
         {/* NUTRITION CARD */}
         {nutrition && (
