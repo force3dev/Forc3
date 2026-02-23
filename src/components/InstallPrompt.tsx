@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 export default function InstallPrompt() {
   const [show, setShow] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null); // eslint-disable-line
 
   useEffect(() => {
     // Only show on mobile

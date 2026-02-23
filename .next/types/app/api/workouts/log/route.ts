@@ -1,4 +1,4 @@
-// File: C:\Users\Geric\Desktop\forc3\src\app\api\workouts\log\route.ts
+// File: /home/runner/work/Forc3/Forc3/src/app/api/workouts/log/route.ts
 import * as entry from '../../../../../../src/app/api/workouts/log/route.js'
 import type { NextRequest } from 'next/server.js'
 

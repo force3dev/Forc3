@@ -573,7 +573,7 @@ export async function GET(req: NextRequest) {
 // ── 10. app/api/strava/sync/route.ts ─────────────────────────────────────────
 writeIfMissing(
   path.join(src, "app/api/strava/sync/route.ts"),
-  `import { NextRequest, NextResponse } from "next/server";
+  `import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
@@ -597,8 +597,8 @@ async function refreshIfNeeded(user: { stravaAccessToken: string | null; stravaR
   return data.access_token as string;
 }
 
-export async function GET(req: NextRequest) {
-  return POST(req);
+export async function GET() {
+  return POST();
 }
 
 export async function POST() {

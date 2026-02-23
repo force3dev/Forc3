@@ -1,4 +1,4 @@
-// File: C:\Users\Geric\Desktop\forc3\src\app\onboarding\welcome\page.tsx
+// File: /home/runner/work/Forc3/Forc3/src/app/onboarding/welcome/page.tsx
 import * as entry from '../../../../../src/app/onboarding/welcome/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

@@ -104,7 +104,7 @@ export default function HistoryPage() {
         .map(l => ({ ...l, _date: new Date(l.createdAt).getTime() })),
     ];
     return filtered.sort((a, b) =>
-      (b as { _date: number })._date - (a as { _date: number })._date
+      (b as unknown as { _date: number })._date - (a as unknown as { _date: number })._date
     );
   }, [workoutLogs, cardioLogs, filter]);
 
