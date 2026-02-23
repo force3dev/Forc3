@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/shared/BottomNav";
+import CardioCalendar from "@/components/cardio/CardioCalendar";
 
 interface ExerciseSpec {
   id: string;
@@ -166,6 +167,11 @@ export default function PlanPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Cardio Calendar */}
+      <div className="px-6 mt-6">
+        <CardioCalendar />
       </div>
 
       <BottomNav active="workout" />

@@ -1,1 +1,23 @@
-{}
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/onboarding/page": "app/onboarding/page.js",
+  "/signup/page": "app/signup/page.js",
+  "/api/user/check-username/route": "app/api/user/check-username/route.js",
+  "/api/user/set-username/route": "app/api/user/set-username/route.js",
+  "/api/user/onboarding/route": "app/api/user/onboarding/route.js",
+  "/onboarding/welcome/page": "app/onboarding/welcome/page.js",
+  "/api/workouts/today/route": "app/api/workouts/today/route.js",
+  "/api/coach/check-limit/route": "app/api/coach/check-limit/route.js",
+  "/api/coach/welcome/route": "app/api/coach/welcome/route.js",
+  "/api/user/profile/route": "app/api/user/profile/route.js",
+  "/api/nutrition/route": "app/api/nutrition/route.js",
+  "/api/progress/recovery/route": "app/api/progress/recovery/route.js",
+  "/api/cardio/today/route": "app/api/cardio/today/route.js",
+  "/api/strava/sync/route": "app/api/strava/sync/route.js",
+  "/api/coach/morning-checkin/route": "app/api/coach/morning-checkin/route.js",
+  "/workout/page": "app/workout/page.js",
+  "/api/plan/route": "app/api/plan/route.js",
+  "/plan/page": "app/plan/page.js"
+}

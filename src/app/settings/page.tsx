@@ -1,6 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import StravaConnect from "@/components/StravaConnect";
+import PushPermission from "@/components/PushPermission";
 
 const SECTIONS = [
   {
@@ -69,6 +71,15 @@ export default function SettingsPage() {
             </div>
           </div>
         ))}
+
+        {/* Strava Connect */}
+        <div>
+          <div className="text-xs text-neutral-500 uppercase tracking-widest mb-2 px-1">Integrations</div>
+          <StravaConnect />
+        </div>
+
+        {/* Push notifications */}
+        <PushPermission />
 
         {/* Danger zone */}
         <div>
