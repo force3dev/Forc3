@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
+import SleepDebtCard from "@/components/SleepDebtCard";
 import PullToRefreshWrapper from "@/components/shared/PullToRefreshWrapper";
 import WeeklySummaryPopup from "@/components/shared/WeeklySummaryPopup";
 import CardioBlock from "@/components/cardio/CardioBlock";
@@ -305,6 +306,11 @@ export default function HomePage() {
           </div>
           <span className="text-[#0066FF]">→</span>
         </Link>
+      </div>
+
+      {/* Sleep Debt */}
+      <div className="px-6 pb-2">
+        <SleepDebtCard />
       </div>
 
       <BottomNav active="home" />

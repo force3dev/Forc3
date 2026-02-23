@@ -81,6 +81,12 @@ model User {
   friendshipsInitiated Friendship[] @relation("FriendshipUser")
   friendshipsReceived  Friendship[] @relation("FriendshipFriend")
   nutritionTarget NutritionTarget?
+
+  // New features
+  coachPersonality CoachPersonality?
+  mealPlans        MealPlan[]
+  seasons          Season[]
+  bossBattleEntries BossBattleEntry[]
 }
 
 model Profile {
@@ -231,6 +237,8 @@ model WorkoutExercise {
   restSeconds  Int    @default(120)
   supersetGroup Int?
   notes        String?
+  tempo        String?  // e.g. "3-1-1-0" (eccentric-pause-concentric-pause)
+  dropSets     Int    @default(0) // number of drop sets after working sets
 }
 
 // ─── Logging & Tracking ───────────────────────────────────────────────────────
@@ -273,14 +281,17 @@ model SetLog {
   exerciseLogId String
   exerciseLog   ExerciseLog @relation(fields: [exerciseLogId], references: [id], onDelete: Cascade)
 
-  setNumber   Int
-  weight      Float
-  reps        Int
-  rpe         Float?
-  rir         Int?
-  isWarmup    Boolean  @default(false)
-  isPR        Boolean  @default(false)
-  completedAt DateTime @default(now())
+  setNumber    Int
+  weight       Float
+  reps         Int
+  rpe          Float?
+  rir          Int?
+  isWarmup     Boolean  @default(false)
+  isPR         Boolean  @default(false)
+  isDropSet    Boolean  @default(false)
+  dropSetNumber Int?
+  tempo        String?
+  completedAt  DateTime @default(now())
 }
 
 model PersonalRecord {
@@ -465,19 +476,20 @@ model BodyMeasurement {
   id     String @id @default(cuid())
   userId String
 
-  date      DateTime @default(now())
-  weight    Float?
-  bodyFat   Float?
-  chest     Float?
-  waist     Float?
-  hips      Float?
+  date       DateTime @default(now())
+  weight     Float?
+  bodyFat    Float?
+  neck       Float?
+  chest      Float?
+  waist      Float?
+  hips       Float?
   bicepLeft  Float?
   bicepRight Float?
   thighLeft  Float?
   thighRight Float?
   calfLeft   Float?
   calfRight  Float?
-  notes     String?
+  notes      String?
 }
 
 model ProgressPhoto {
@@ -853,4 +865,89 @@ model Friendship {
   friend    User     @relation("FriendshipFriend", fields: [friendId], references: [id], onDelete: Cascade)
 
   @@unique([userId, friendId])
+}
+
+// ─── AI Personality Profiling ─────────────────────────────────────────────────
+
+model CoachPersonality {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tonePreference    String   @default("balanced") // tough_love | encouragement | balanced
+  observations      Json     @default("[]")        // [{date, note, category}]
+  weakDays          Json     @default("[]")        // ["Wednesday", "Friday"]
+  stallingExercises Json     @default("[]")        // [{name, weeksStalled}]
+  strongExercises   Json     @default("[]")        // [{name, rate}]
+  totalInteractions Int      @default(0)
+  lastAnalyzed      DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ─── Meal Planning ────────────────────────────────────────────────────────────
+
+model MealPlan {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekStart     DateTime
+  days          Json     // [{day, meals:[{name,foods:[{name,qty,unit}],calories,protein,carbs,fat}]}]
+  groceryList   Json     // [{category, items:[{name,qty,unit}]}]
+  calorieTarget Int
+  proteinTarget Int
+  carbsTarget   Int
+  fatTarget     Int
+  generatedAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── Training Seasons ─────────────────────────────────────────────────────────
+
+model Season {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  goalDescription    String
+  startDate          DateTime
+  endDate            DateTime
+  benchmarkExercises Json     @default("[]") // [{exerciseId,name,baselineWeight,baselineReps,currentWeight,currentReps}]
+  status             String   @default("active") // active | completed | abandoned
+  finalResults       Json?
+  weekNumber         Int      @default(1)
+  createdAt          DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── Boss Battles ─────────────────────────────────────────────────────────────
+
+model BossBattle {
+  id           String           @id @default(cuid())
+  month        Int
+  year         Int
+  name         String
+  description  String
+  bossIcon     String           @default("👹")
+  requirements Json             // [{type,target,unit,label}]
+  xpReward     Int              @default(500)
+  entries      BossBattleEntry[]
+
+  @@unique([month, year])
+}
+
+model BossBattleEntry {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bossBattleId String
+  bossBattle   BossBattle @relation(fields: [bossBattleId], references: [id])
+  progress     Json       @default("{}") // {workouts:0, volume:0, cardio_minutes:0}
+  defeated     Boolean    @default(false)
+  defeatedAt   DateTime?
+  joinedAt     DateTime   @default(now())
+
+  @@unique([userId, bossBattleId])
+  @@index([userId])
 }

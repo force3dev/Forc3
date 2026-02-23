@@ -115,11 +115,12 @@ function formatRecentNutrition(logs: Awaited<ReturnType<typeof getRecentNutritio
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
 async function buildCoachSystemPrompt(userId: string): Promise<string> {
-  const [profile, workouts, nutrition, plan] = await Promise.all([
+  const [profile, workouts, nutrition, plan, personality] = await Promise.all([
     getUserProfile(userId),
     getRecentWorkouts(userId, 14),
     getRecentNutrition(userId, 7),
     getCurrentPlan(userId),
+    prisma.coachPersonality.findUnique({ where: { userId } }).catch(() => null),
   ]);
 
   const raceGoalsStr = formatRaceGoals(profile?.raceGoals);
@@ -198,13 +199,22 @@ ${formatRecentWorkouts(workouts)}
 ## RECENT NUTRITION (Last 7 days)
 ${formatRecentNutrition(nutrition)}
 
+## COACHING STYLE (Learned from ${personality?.totalInteractions || 0} interactions)
+${personality ? `
+- Communication preference: ${personality.tonePreference === "tough_love" ? "Direct and challenging — this athlete responds to being pushed" : personality.tonePreference === "encouragement" ? "Positive and supportive — this athlete needs genuine encouragement" : "Balanced — mix of honesty and support"}
+${(personality.stallingExercises as { name: string; weeksStalled: number }[])?.length > 0 ? `- Stalling exercises (bring up proactively): ${(personality.stallingExercises as { name: string }[]).map(e => e.name).join(", ")}` : ""}
+${(personality.weakDays as string[])?.length > 0 ? `- Low-consistency days: ${(personality.weakDays as string[]).join(", ")} — acknowledge and adapt if relevant` : ""}
+${(personality.strongExercises as { name: string }[])?.length > 0 ? `- Strong lifts (acknowledge progress): ${(personality.strongExercises as { name: string }[]).map(e => e.name).join(", ")}` : ""}
+${(personality.observations as { note: string }[])?.slice(-3).map(o => `- Observation: ${o.note}`).join("\n") || ""}` : "- No personality data yet — observe and adapt"}
+
 ## COACHING RULES
 1. Always reference their actual data when giving advice
 2. If they ask about changing their plan, explain the WHY
 3. Be specific with numbers — "aim for 180g protein" not "eat more protein"
 4. Keep responses concise — 3-5 sentences unless they ask for detail
-5. If you notice concerning patterns, flag them proactively
-6. Reference their upcoming race when relevant — connect today's training to their goal`;
+5. If you notice concerning patterns (stalling, weak days), flag them proactively
+6. Reference their upcoming race when relevant — connect today's training to their goal
+7. Adapt your tone to match their learned preference above`;
 }
 
 // ─── Main Ask Function ────────────────────────────────────────────────────────

@@ -19,6 +19,8 @@ interface LoggedSet {
   rpe?: number;
   isPR?: boolean;
   logged: boolean;
+  isDropSet?: boolean;
+  dropSetNumber?: number;
 }
 
 interface Exercise {
@@ -45,6 +47,9 @@ interface Exercise {
   progressionBadge: string | null;
   progressionReason: string | null;
   loggedSets: LoggedSet[];
+  supersetGroup?: string | null;
+  tempo?: string | null;
+  dropSets?: number;
 }
 
 interface WorkoutData {
@@ -277,6 +282,48 @@ function PlateCalculatorModal({
   );
 }
 
+// ─── Warmup Calculator Modal ──────────────────────────────────────────────────
+
+function WarmupModal({ workingWeight, onClose }: { workingWeight: number; onClose: () => void }) {
+  const warmups = [
+    { pct: 40, reps: 10 },
+    { pct: 60, reps: 6 },
+    { pct: 75, reps: 3 },
+    { pct: 90, reps: 1 },
+  ];
+  return (
+    <div className="fixed inset-0 bg-black/90 z-50 flex items-end">
+      <div className="w-full bg-[#141414] border-t border-[#262626] rounded-t-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg">Warmup Sets</h3>
+          <button onClick={onClose} className="text-neutral-500 text-lg">✕</button>
+        </div>
+        <p className="text-xs text-neutral-500">Working weight: <span className="text-white font-semibold">{workingWeight} lbs</span></p>
+        <div className="space-y-2">
+          {warmups.map((w, i) => {
+            const wt = Math.round((workingWeight * w.pct / 100) / 2.5) * 2.5;
+            const plates = calculatePlates(wt, "lbs");
+            return (
+              <div key={i} className="bg-[#0a0a0a] border border-[#262626] rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-neutral-500">Set {i + 1} — {w.pct}%</span>
+                  <p className="font-bold">{wt} lbs × {w.reps} reps</p>
+                  {plates.platesPerSide.length > 0 && (
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      Bar + {plates.platesPerSide.map(p => `${p.count}×${p.weight}`).join(", ")} each side
+                    </p>
+                  )}
+                </div>
+                <span className="text-2xl text-neutral-700">{i + 1}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Workout Page ────────────────────────────────────────────────────────
 
 export default function WorkoutPage() {
@@ -292,6 +339,8 @@ export default function WorkoutPage() {
   const [timerSeconds, setTimerSeconds] = useState(120);
   const [showPlateCalc, setShowPlateCalc] = useState(false);
   const [plateCalcWeight, setPlateCalcWeight] = useState(135);
+  const [showWarmup, setShowWarmup] = useState(false);
+  const [warmupWeight, setWarmupWeight] = useState(135);
   const [showPR, setShowPR] = useState(false);
   const [prType, setPrType] = useState<"1rm" | "volume" | null>(null);
   const [prExercise, setPrExercise] = useState<{ name: string; weight: number; reps: number } | null>(null);
@@ -542,6 +591,12 @@ export default function WorkoutPage() {
           onClose={() => setShowPlateCalc(false)}
         />
       )}
+      {showWarmup && (
+        <WarmupModal
+          workingWeight={warmupWeight}
+          onClose={() => setShowWarmup(false)}
+        />
+      )}
 
       {/* Header */}
       <header className="px-5 pt-6 pb-4 flex items-center justify-between border-b border-[#1a1a1a]">
@@ -646,6 +701,16 @@ export default function WorkoutPage() {
                       <span className={`font-semibold ${isComplete ? "text-neutral-400" : "text-white"}`}>
                         {ex.name}
                       </span>
+                      {ex.supersetGroup && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#7C3AED]/20 text-[#a78bfa] border border-[#7C3AED]/30">
+                          SS
+                        </span>
+                      )}
+                      {ex.tempo && (
+                        <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#FFB300]/10 text-[#FFB300] border border-[#FFB300]/20">
+                          {ex.tempo}
+                        </span>
+                      )}
                       {ex.progressionBadge && !isComplete && (
                         <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#0066FF]/20 text-[#0066FF] border border-[#0066FF]/30">
                           {ex.progressionBadge}
@@ -720,8 +785,10 @@ export default function WorkoutPage() {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="text-xs text-neutral-500 w-10">
-                            {set.logged ? "✓" : `Set ${set.setNumber}`}
+                          <span className="text-xs text-neutral-500 w-12 flex-shrink-0">
+                            {set.logged ? "✓" : set.isDropSet ? (
+                              <span className="text-[#FF4444] font-bold text-[10px]">DROP</span>
+                            ) : `S${set.setNumber}`}
                           </span>
 
                           {/* Weight */}
@@ -795,6 +862,35 @@ export default function WorkoutPage() {
                     ))}
                   </div>
 
+                  {/* Drop Set Button — shows after all regular sets are logged */}
+                  {ex.loggedSets.every(s => s.logged) && (ex.dropSets ?? 0) > 0 &&
+                    ex.loggedSets.filter(s => s.isDropSet).length < (ex.dropSets ?? 0) && (
+                    <button
+                      onClick={() => {
+                        const lastSet = ex.loggedSets[ex.loggedSets.length - 1];
+                        const dropWeight = Math.round((lastSet.weight * 0.8) / 2.5) * 2.5;
+                        const dropCount = ex.loggedSets.filter(s => s.isDropSet).length;
+                        setWorkout(prev => {
+                          if (!prev) return prev;
+                          const exercises = [...prev.exercises];
+                          const newSet: LoggedSet = {
+                            setNumber: ex.loggedSets.length + 1,
+                            weight: dropWeight,
+                            reps: lastSet.reps,
+                            logged: false,
+                            isDropSet: true,
+                            dropSetNumber: dropCount + 1,
+                          };
+                          exercises[exIdx] = { ...exercises[exIdx], loggedSets: [...exercises[exIdx].loggedSets, newSet] };
+                          return { ...prev, exercises };
+                        });
+                      }}
+                      className="w-full py-2 bg-[#FF4444]/10 border border-[#FF4444]/30 rounded-xl text-xs text-[#FF4444] font-semibold"
+                    >
+                      ↓ Add Drop Set (−20% weight)
+                    </button>
+                  )}
+
                   {/* Tools */}
                   <div className="flex gap-2 pt-1">
                     <button
@@ -804,7 +900,16 @@ export default function WorkoutPage() {
                       }}
                       className="flex-1 py-2.5 bg-[#0a0a0a] border border-[#262626] rounded-xl text-xs text-neutral-400 hover:text-white transition-colors"
                     >
-                      🔢 Plate Calc
+                      🔢 Plates
+                    </button>
+                    <button
+                      onClick={() => {
+                        setWarmupWeight(ex.loggedSets[0]?.weight || ex.suggestedWeight || 135);
+                        setShowWarmup(true);
+                      }}
+                      className="flex-1 py-2.5 bg-[#0a0a0a] border border-[#262626] rounded-xl text-xs text-neutral-400 hover:text-white transition-colors"
+                    >
+                      🔥 Warmup
                     </button>
                     <button
                       onClick={() => {
@@ -813,7 +918,7 @@ export default function WorkoutPage() {
                       }}
                       className="flex-1 py-2.5 bg-[#0a0a0a] border border-[#262626] rounded-xl text-xs text-neutral-400 hover:text-white transition-colors"
                     >
-                      ⏱ Rest Timer
+                      ⏱ Rest
                     </button>
                   </div>
                 </div>

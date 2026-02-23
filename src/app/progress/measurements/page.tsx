@@ -31,6 +31,26 @@ const FIELDS = [
   { key: "leftArm", label: "Arm", unit: "in", color: "#FF6B35" },
 ];
 
+function computeNavyBF(
+  sex: string,
+  waist: number,
+  neck: number,
+  height: number,
+  hips?: number
+): number | null {
+  if (!waist || !neck || !height || waist <= neck) return null;
+  if (sex === "female" && (!hips || hips <= 0)) return null;
+  try {
+    if (sex === "female" && hips) {
+      const val = 495 / (1.29579 - 0.35004 * Math.log10(waist + hips - neck) + 0.22100 * Math.log10(height)) - 450;
+      return Math.max(0, Math.min(70, parseFloat(val.toFixed(1))));
+    } else {
+      const val = 495 / (1.0324 - 0.19077 * Math.log10(waist - neck) + 0.15456 * Math.log10(height)) - 450;
+      return Math.max(0, Math.min(70, parseFloat(val.toFixed(1))));
+    }
+  } catch { return null; }
+}
+
 export default function MeasurementsPage() {
   const router = useRouter();
   const [measurements, setMeasurements] = useState<BodyMeasurement[]>([]);
@@ -38,6 +58,7 @@ export default function MeasurementsPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeChart, setActiveChart] = useState("weight");
+  const [profile, setProfile] = useState<{ sex?: string; height?: number } | null>(null);
 
   const [form, setForm] = useState({
     weight: "", bodyFat: "", chest: "", waist: "", hips: "",
@@ -56,7 +77,10 @@ export default function MeasurementsPage() {
     }
   }
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    fetch("/api/user/profile").then(r => r.json()).then(d => setProfile({ sex: d.sex, height: d.height })).catch(() => {});
+  }, []);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -195,6 +219,56 @@ export default function MeasurementsPage() {
             </div>
           </div>
         )}
+
+        {/* Navy Body Fat Estimate */}
+        {latest && profile?.height && latest.neck && latest.waist && (() => {
+          const navyBF = computeNavyBF(
+            profile.sex || "male",
+            latest.waist!,
+            latest.neck!,
+            profile.height!,
+            latest.hips
+          );
+          if (navyBF === null) return null;
+          const weight = latest.weight;
+          const leanMass = weight ? parseFloat((weight * (1 - navyBF / 100)).toFixed(1)) : null;
+          const fatMass = weight ? parseFloat((weight * navyBF / 100).toFixed(1)) : null;
+          const prevNavyBF = prev && profile?.height && prev.neck && prev.waist
+            ? computeNavyBF(profile.sex || "male", prev.waist!, prev.neck!, profile.height!, prev.hips)
+            : null;
+          const bfDelta = prevNavyBF !== null ? parseFloat((navyBF - prevNavyBF).toFixed(1)) : null;
+          return (
+            <div className="bg-[#141414] border border-[#0066FF]/30 rounded-2xl p-4">
+              <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Navy Body Fat Estimate</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-[#0a0a0a] rounded-xl p-3">
+                  <p className="text-xs text-neutral-500">Body Fat</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="font-bold text-xl text-[#FFB300]">{navyBF}%</span>
+                    {bfDelta !== null && (
+                      <span className={`text-xs font-semibold ${bfDelta < 0 ? "text-[#00C853]" : "text-red-400"}`}>
+                        {bfDelta > 0 ? "+" : ""}{bfDelta}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {leanMass && (
+                  <div className="bg-[#0a0a0a] rounded-xl p-3">
+                    <p className="text-xs text-neutral-500">Lean Mass</p>
+                    <p className="font-bold text-xl text-[#00C853]">{leanMass}<span className="text-xs text-neutral-500 ml-0.5">lbs</span></p>
+                  </div>
+                )}
+                {fatMass && (
+                  <div className="bg-[#0a0a0a] rounded-xl p-3">
+                    <p className="text-xs text-neutral-500">Fat Mass</p>
+                    <p className="font-bold text-xl text-[#FF4444]">{fatMass}<span className="text-xs text-neutral-500 ml-0.5">lbs</span></p>
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-neutral-700 mt-2">U.S. Navy formula using neck + waist{profile.sex === "female" ? " + hips" : ""} + height</p>
+            </div>
+          );
+        })()}
 
         {/* Log button */}
         {!showForm ? (

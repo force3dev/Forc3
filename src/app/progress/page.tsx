@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import BottomNav from "@/components/shared/BottomNav";
 import ProgressPhotoUpload from "@/components/ProgressPhotoUpload";
 import ProgressPhotoGallery from "@/components/ProgressPhotoGallery";
+import VolumeLandmarks from "@/components/VolumeLandmarks";
 
 function WorkoutCalendar() {
   const [workoutDates, setWorkoutDates] = useState<Set<string>>(new Set());
@@ -297,6 +298,9 @@ export default function ProgressPage() {
 
         {/* Workout Calendar Heatmap */}
         <WorkoutCalendar />
+
+        {/* Volume Landmarks */}
+        <VolumeLandmarks />
 
         {/* Personal Records */}
         <div>
