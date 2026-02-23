@@ -3,8 +3,37 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/shared/BottomNav";
 
+const CARDIO_TYPE_ICONS: Record<string, string> = {
+  running: "🏃", cycling: "🚴", swimming: "🏊", hiit: "⚡",
+  rowing: "🚣", jump_rope: "🪢", elliptical: "🔄", walking: "🚶",
+  stair_climber: "🪜", sports: "⚽", run: "🏃", bike: "🚴",
+  swim: "🏊", row: "🚣", sprint: "💨",
+};
+
+interface CardioActivityEntry {
+  id: string;
+  type: string;
+  sport?: string | null;
+  title?: string | null;
+  description?: string | null;
+  intensity?: string | null;
+  duration: number;
+  distance?: number | null;
+  calories?: number | null;
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+function formatDuration(secs: number) {
+  if (secs < 120) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 function WorkoutCalendar() {
   const [workoutDates, setWorkoutDates] = useState<Set<string>>(new Set());
+  const [cardioDates, setCardioDates] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/workouts/log?limit=200")
@@ -15,6 +44,18 @@ function WorkoutCalendar() {
           dates.add(new Date(log.startedAt).toISOString().slice(0, 10));
         }
         setWorkoutDates(dates);
+      })
+      .catch(() => {});
+
+    fetch("/api/cardio/log")
+      .then(r => r.json())
+      .then(d => {
+        const dates = new Set<string>();
+        for (const a of d.activities || []) {
+          const ts = a.completedAt || a.createdAt;
+          if (ts) dates.add(new Date(ts).toISOString().slice(0, 10));
+        }
+        setCardioDates(dates);
       })
       .catch(() => {});
   }, []);
@@ -40,10 +81,11 @@ function WorkoutCalendar() {
   }
 
   const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+  const todayIso = today.toISOString().slice(0, 10);
 
   return (
     <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4">
-      <h3 className="font-semibold text-sm mb-3 text-neutral-300">Workout Activity</h3>
+      <h3 className="font-semibold text-sm mb-3 text-neutral-300">Training Activity</h3>
       <div className="overflow-x-auto">
         <div className="flex gap-1 min-w-max">
           {/* Day labels */}
@@ -61,18 +103,24 @@ function WorkoutCalendar() {
                 if (!day) return <div key={di} className="w-3 h-3" />;
                 const iso = day.toISOString().slice(0, 10);
                 const hasWorkout = workoutDates.has(iso);
-                const isToday = iso === today.toISOString().slice(0, 10);
+                const hasCardio = cardioDates.has(iso);
+                const isToday = iso === todayIso;
+                let colorClass = "bg-[#1a1a1a]";
+                let borderClass = "";
+                if (hasWorkout && hasCardio) colorClass = "bg-[#7B4EFF]"; // both: purple
+                else if (hasWorkout) colorClass = "bg-[#0066FF]"; // strength: blue
+                else if (hasCardio) colorClass = "bg-[#00C853]"; // cardio: green
+                else if (isToday) { colorClass = "bg-[#1a1a1a]"; borderClass = "border border-[#0066FF]/50"; }
+                const label = [
+                  iso,
+                  hasWorkout ? "strength" : "",
+                  hasCardio ? "cardio" : "",
+                ].filter(Boolean).join(" — ");
                 return (
                   <div
                     key={di}
-                    className={`w-3 h-3 rounded-sm ${
-                      hasWorkout
-                        ? "bg-[#0066FF]"
-                        : isToday
-                        ? "bg-[#1a1a1a] border border-[#0066FF]/50"
-                        : "bg-[#1a1a1a]"
-                    }`}
-                    title={`${iso}${hasWorkout ? " — workout" : ""}`}
+                    className={`w-3 h-3 rounded-sm ${colorClass} ${borderClass}`}
+                    title={label}
                   />
                 );
               })}
@@ -80,12 +128,254 @@ function WorkoutCalendar() {
           ))}
         </div>
       </div>
-      <div className="flex items-center gap-2 mt-3">
-        <div className="w-3 h-3 rounded-sm bg-[#1a1a1a]" />
-        <span className="text-[10px] text-neutral-600">Rest</span>
-        <div className="w-3 h-3 rounded-sm bg-[#0066FF] ml-2" />
-        <span className="text-[10px] text-neutral-600">Workout</span>
+      <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-3">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm bg-[#1a1a1a]" />
+          <span className="text-[10px] text-neutral-600">Rest</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm bg-[#0066FF]" />
+          <span className="text-[10px] text-neutral-600">Strength</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm bg-[#00C853]" />
+          <span className="text-[10px] text-neutral-600">Cardio</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm bg-[#7B4EFF]" />
+          <span className="text-[10px] text-neutral-600">Both</span>
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Cardio Monthly Calendar ──────────────────────────────────────────────────
+
+function CardioCalendar() {
+  const [activities, setActivities] = useState<CardioActivityEntry[]>([]);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [viewDate, setViewDate] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  useEffect(() => {
+    fetch("/api/cardio/log")
+      .then(r => r.json())
+      .then(d => setActivities(d.activities || []))
+      .catch(() => {});
+  }, []);
+
+  // Map iso date -> activities
+  const byDate = activities.reduce<Record<string, CardioActivityEntry[]>>((acc, a) => {
+    const ts = a.completedAt || a.createdAt;
+    if (!ts) return acc;
+    const iso = new Date(ts).toISOString().slice(0, 10);
+    if (!acc[iso]) acc[iso] = [];
+    acc[iso].push(a);
+    return acc;
+  }, {});
+
+  const { year, month } = viewDate;
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const todayIso = today.toISOString().slice(0, 10);
+
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const DAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+  const prevMonth = () => setViewDate(v => {
+    const d = new Date(v.year, v.month - 1, 1);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const nextMonth = () => setViewDate(v => {
+    const d = new Date(v.year, v.month + 1, 1);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  const selectedActivities = selectedDay ? (byDate[selectedDay] || []) : [];
+
+  return (
+    <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-sm text-neutral-300">Cardio Calendar</h3>
+        <div className="flex items-center gap-2">
+          <button onClick={prevMonth} className="text-neutral-500 hover:text-white px-1 text-sm">‹</button>
+          <span className="text-xs font-semibold text-neutral-300 w-16 text-center">
+            {MONTHS[month]} {year}
+          </span>
+          <button onClick={nextMonth} className="text-neutral-500 hover:text-white px-1 text-sm">›</button>
+        </div>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {DAYS.map(d => (
+          <div key={d} className="text-center text-[9px] text-neutral-600 font-medium py-0.5">{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {/* Empty cells before first day */}
+        {Array.from({ length: firstDay }, (_, i) => (
+          <div key={`empty-${i}`} className="aspect-square" />
+        ))}
+        {/* Day cells */}
+        {Array.from({ length: daysInMonth }, (_, i) => {
+          const day = i + 1;
+          const iso = new Date(Date.UTC(year, month, day)).toISOString().slice(0, 10);
+          const dayActivities = byDate[iso] || [];
+          const hasCardio = dayActivities.length > 0;
+          const isToday = iso === todayIso;
+          const isSelected = iso === selectedDay;
+          return (
+            <button
+              key={day}
+              onClick={() => setSelectedDay(isSelected ? null : iso)}
+              className={`aspect-square rounded-lg flex flex-col items-center justify-center relative transition-colors ${
+                isSelected
+                  ? "bg-[#0066FF] text-white"
+                  : isToday
+                  ? "bg-[#0066FF]/20 border border-[#0066FF]/40 text-[#0066FF]"
+                  : hasCardio
+                  ? "bg-[#00C853]/15 hover:bg-[#00C853]/25 text-white"
+                  : "hover:bg-[#1f1f1f] text-neutral-500"
+              }`}
+            >
+              <span className="text-[10px] font-medium leading-none">{day}</span>
+              {hasCardio && !isSelected && (
+                <span className="text-[8px] mt-0.5 leading-none">
+                  {CARDIO_TYPE_ICONS[dayActivities[0].type] || "🏃"}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected day detail */}
+      {selectedDay && (
+        <div className="mt-4 pt-4 border-t border-[#262626]">
+          {selectedActivities.length === 0 ? (
+            <p className="text-xs text-neutral-500 text-center">No cardio logged on this day</p>
+          ) : (
+            <div className="space-y-3">
+              {selectedActivities.map(a => (
+                <div key={a.id} className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{CARDIO_TYPE_ICONS[a.type] || "🏃"}</span>
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        {a.title || (a.sport ? `${a.type} — ${a.sport}` : a.type)}
+                      </p>
+                      <p className="text-[10px] text-neutral-500">
+                        {formatDuration(a.duration)}
+                        {a.distance ? ` · ${a.distance.toFixed(2)} mi` : ""}
+                        {a.calories ? ` · ${Math.round(a.calories)} cal` : ""}
+                        {a.intensity ? ` · ${a.intensity}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  {a.description && (
+                    <div className="bg-[#0d0d0d] border border-[#262626] rounded-xl p-3">
+                      <p className="text-[10px] font-semibold text-[#00C853] mb-1 uppercase tracking-wide">Instructions</p>
+                      <p className="text-xs text-neutral-400 leading-relaxed">{a.description}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Recent Cardio History ────────────────────────────────────────────────────
+
+function CardioHistory() {
+  const [activities, setActivities] = useState<CardioActivityEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/cardio/log")
+      .then(r => r.json())
+      .then(d => setActivities((d.activities || []).slice(0, 10)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-4">
+        <div className="w-5 h-5 border-2 border-[#00C853] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (activities.length === 0) {
+    return (
+      <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 text-center">
+        <div className="text-3xl mb-2">🏃</div>
+        <p className="font-semibold text-sm">No cardio logged yet</p>
+        <p className="text-xs text-neutral-500 mt-1">Complete a cardio session to see your history here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {activities.map(a => {
+        const ts = a.completedAt || a.createdAt;
+        const dateStr = ts
+          ? new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : "";
+        const isOpen = expanded === a.id;
+        return (
+          <div key={a.id} className="bg-[#141414] border border-[#262626] rounded-2xl overflow-hidden">
+            <button
+              className="w-full flex items-center gap-3 p-4 text-left hover:bg-[#1a1a1a] transition-colors"
+              onClick={() => setExpanded(isOpen ? null : a.id)}
+            >
+              <span className="text-2xl flex-shrink-0">{CARDIO_TYPE_ICONS[a.type] || "🏃"}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm truncate">
+                  {a.title || (a.sport ? `${a.type} — ${a.sport}` : a.type)}
+                </p>
+                <p className="text-[10px] text-neutral-500">
+                  {dateStr} · {formatDuration(a.duration)}
+                  {a.distance ? ` · ${a.distance.toFixed(2)} mi` : ""}
+                  {a.calories ? ` · ${Math.round(a.calories)} cal` : ""}
+                </p>
+              </div>
+              {a.intensity && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${
+                  a.intensity === "easy" ? "bg-green-900/30 text-green-400"
+                  : a.intensity === "moderate" ? "bg-yellow-900/30 text-yellow-400"
+                  : a.intensity === "hard" ? "bg-orange-900/30 text-orange-400"
+                  : "bg-red-900/30 text-red-400"
+                }`}>
+                  {a.intensity}
+                </span>
+              )}
+              <span className="text-neutral-600 text-xs ml-1">{isOpen ? "▲" : "▼"}</span>
+            </button>
+            {isOpen && a.description && (
+              <div className="px-4 pb-4">
+                <div className="bg-[#0d0d0d] border border-[#1f1f1f] rounded-xl p-3">
+                  <p className="text-[10px] font-semibold text-[#00C853] mb-1.5 uppercase tracking-wide">Workout Instructions</p>
+                  <p className="text-xs text-neutral-400 leading-relaxed">{a.description}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -269,6 +559,15 @@ export default function ProgressPage() {
 
         {/* Workout Calendar Heatmap */}
         <WorkoutCalendar />
+
+        {/* Cardio Monthly Calendar */}
+        <CardioCalendar />
+
+        {/* Cardio History */}
+        <div>
+          <h2 className="text-lg font-bold mb-3">Cardio History</h2>
+          <CardioHistory />
+        </div>
 
         {/* Personal Records */}
         <div>
