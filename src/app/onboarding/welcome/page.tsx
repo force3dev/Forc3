@@ -124,10 +124,13 @@ export default function OnboardingWelcomePage() {
           className="pt-2"
         >
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={() => {
+              const seen = typeof window !== "undefined" && localStorage.getItem("forc3_tour_seen");
+              router.push(seen ? "/dashboard" : "/onboarding/tour");
+            }}
             className="w-full py-4 bg-[#0066FF] text-white font-bold rounded-xl hover:bg-[#0052CC] transition-colors"
           >
-            Let&apos;s Get Started 💪
+            Let's Get Started 💪
           </button>
         </motion.div>
       </motion.div>

@@ -21,33 +21,73 @@ export default function EditPublicProfilePage() {
     bio: "",
     avatarUrl: null,
   });
+  const [originalUsername, setOriginalUsername] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "error">("idle");
 
   useEffect(() => {
     fetch("/api/user/profile")
       .then((r) => r.json())
-      .then((d) =>
+      .then((d) => {
+        const u = d.username || "";
         setForm({
           displayName: d.displayName || d.profile?.name || "",
-          username: d.username || "",
+          username: u,
           bio: d.bio || "",
           avatarUrl: d.avatarUrl || null,
-        })
-      )
+        });
+        setOriginalUsername(u);
+      })
       .finally(() => setLoading(false));
   }, []);
 
+  // Debounced username availability check
+  useEffect(() => {
+    if (!form.username || form.username === originalUsername) {
+      setUsernameStatus("idle");
+      return;
+    }
+    if (form.username.length < 3) {
+      setUsernameStatus("error");
+      return;
+    }
+
+    setUsernameStatus("checking");
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/user/username?username=${encodeURIComponent(form.username)}`);
+        const data = await res.json();
+        setUsernameStatus(data.available ? "available" : "taken");
+      } catch {
+        setUsernameStatus("error");
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [form.username, originalUsername]);
+
   async function save() {
     setSaving(true);
+
+    // Save username separately if changed
+    if (form.username && form.username !== originalUsername && usernameStatus === "available") {
+      await fetch("/api/user/username", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: form.username }),
+      });
+    }
+
+    // Save other profile fields
     await fetch("/api/user/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         displayName: form.displayName || null,
-        username: form.username?.replace(/^@/, "") || null,
         bio: form.bio?.slice(0, 150) || null,
         avatarUrl: form.avatarUrl || null,
       }),
     });
+
     setSaving(false);
     router.push("/profile");
   }
@@ -88,12 +128,27 @@ export default function EditPublicProfilePage() {
 
         <div>
           <label className="text-xs text-neutral-500">Username</label>
-          <input
-            value={form.username}
-            onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
-            className="mt-1.5 w-full p-3 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:outline-none focus:border-[#0066FF]"
-            placeholder="@ricky"
-          />
+          <div className="relative">
+            <input
+              value={form.username}
+              onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") }))}
+              className="mt-1.5 w-full p-3 bg-[#0a0a0a] border border-[#262626] rounded-xl focus:outline-none focus:border-[#0066FF] pr-10"
+              placeholder="username"
+              autoCorrect="off"
+              autoCapitalize="off"
+            />
+            <span className="absolute right-3 top-1/2 translate-y-0.5">
+              {usernameStatus === "checking" && <span className="text-neutral-400 text-sm">...</span>}
+              {usernameStatus === "available" && <span className="text-green-400">✓</span>}
+              {usernameStatus === "taken" && <span className="text-red-400">✗</span>}
+              {usernameStatus === "error" && <span className="text-yellow-400">!</span>}
+            </span>
+          </div>
+          {usernameStatus === "taken" && <p className="text-red-400 text-xs mt-1">Username taken</p>}
+          {usernameStatus === "available" && <p className="text-green-400 text-xs mt-1">Available!</p>}
+          {usernameStatus === "error" && form.username.length > 0 && form.username.length < 3 && (
+            <p className="text-yellow-400 text-xs mt-1">Min 3 characters</p>
+          )}
         </div>
 
         <div>
@@ -110,7 +165,7 @@ export default function EditPublicProfilePage() {
 
         <button
           onClick={save}
-          disabled={saving}
+          disabled={saving || usernameStatus === "taken"}
           className="w-full py-3 rounded-xl bg-[#0066FF] font-semibold disabled:opacity-60"
         >
           {saving ? "Saving..." : "Save Changes"}

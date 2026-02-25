@@ -38,27 +38,46 @@ const SPLIT_LABELS: Record<string, string> = {
   full_body: "Full Body",
 };
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 export default function PlanPage() {
   const router = useRouter();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [toast, setToast] = useState("");
 
-  useEffect(() => {
-    async function load() {
-      try {
-        // Get the plan directly from Prisma via a new API route
-        const res = await fetch("/api/plan");
-        if (res.ok) {
-          const data = await res.json();
-          setPlan(data.plan);
-        }
-      } catch {} finally {
-        setLoading(false);
+  async function loadPlan() {
+    try {
+      const res = await fetch("/api/plan");
+      if (res.ok) {
+        const data = await res.json();
+        setPlan(data.plan);
       }
+    } catch {} finally {
+      setLoading(false);
     }
-    load();
-  }, []);
+  }
+
+  useEffect(() => { loadPlan(); }, []);
+
+  async function handleRegenerate() {
+    setRegenerating(true);
+    try {
+      const res = await fetch("/api/program/generate", { method: "POST" });
+      if (res.ok) {
+        await loadPlan();
+        setToast("New program ready! 💪");
+        setTimeout(() => setToast(""), 2500);
+      }
+    } catch {
+      setToast("Failed to generate. Try again.");
+      setTimeout(() => setToast(""), 2500);
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -86,19 +105,72 @@ export default function PlanPage() {
     );
   }
 
+  const todayDayOfWeek = new Date().getDay();
+
   return (
     <main className="min-h-screen bg-black text-white pb-28">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-[#0066FF] text-white text-sm font-semibold px-5 py-2.5 rounded-2xl shadow-lg">
+          {toast}
+        </div>
+      )}
+
       <header className="px-6 pt-8 pb-4">
         <div className="text-xs font-bold tracking-widest text-[#0066FF]">FORC3</div>
-        <h1 className="text-2xl font-bold mt-1">{plan.name}</h1>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-sm text-neutral-500">{SPLIT_LABELS[plan.split] || plan.split}</span>
-          <span className="text-neutral-700">·</span>
-          <span className="text-sm text-neutral-500">{plan.daysPerWeek}x / week</span>
-          <span className="text-neutral-700">·</span>
-          <span className="text-sm text-neutral-500">Week {plan.currentWeek}</span>
+        <div className="flex items-start justify-between mt-1">
+          <div>
+            <h1 className="text-2xl font-bold">{plan.name}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-neutral-500">{SPLIT_LABELS[plan.split] || plan.split}</span>
+              <span className="text-neutral-700">·</span>
+              <span className="text-sm text-neutral-500">{plan.daysPerWeek}x / week</span>
+              <span className="text-neutral-700">·</span>
+              <span className="text-sm text-neutral-500">Week {plan.currentWeek}</span>
+            </div>
+          </div>
+          <button
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            className="flex-shrink-0 px-3 py-2 bg-[#1a1a1a] border border-[#262626] rounded-xl text-xs font-semibold text-neutral-400 hover:text-white hover:border-[#0066FF] transition-all disabled:opacity-50"
+          >
+            {regenerating ? "Building..." : "↻ Regenerate"}
+          </button>
         </div>
       </header>
+
+      {/* Week overview */}
+      <div className="px-6 mb-5">
+        <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4">
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-3">Your Training Week</p>
+          <div className="space-y-2">
+            {DAY_NAMES.map((dayLabel, dayIdx) => {
+              const workout = plan.workouts.find(w => {
+                // dayOfWeek stored as JS getDay() index
+                return (w as unknown as { dayOfWeek?: number }).dayOfWeek === dayIdx;
+              });
+              const isToday = dayIdx === todayDayOfWeek;
+              return (
+                <div key={dayLabel} className={`flex items-center gap-3 py-1.5 ${isToday ? "opacity-100" : "opacity-70"}`}>
+                  <span className={`text-xs font-bold w-7 ${isToday ? "text-[#0066FF]" : "text-neutral-500"}`}>{dayLabel}</span>
+                  {workout ? (
+                    <>
+                      <span className="text-sm">💪</span>
+                      <span className={`text-sm font-medium truncate ${isToday ? "text-white" : "text-neutral-300"}`}>{workout.name}</span>
+                      <span className="ml-auto text-xs text-neutral-600">{workout.exercises.length} ex</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm">😴</span>
+                      <span className="text-sm text-neutral-600">Rest Day</span>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       <div className="px-6 space-y-3">
         {plan.workouts.map((workout, idx) => {

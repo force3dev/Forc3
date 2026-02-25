@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionFromRequest } from "./lib/auth";
 
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/api/auth/login", "/api/auth/signup", "/join"];
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/api/auth/login", "/api/auth/signup", "/join", "/privacy", "/terms", "/support", "/about", "/api/stripe/webhook"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -44,12 +44,16 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // Redirect incomplete onboarding
-  if (
-    !session.onboardingDone &&
-    !pathname.startsWith("/onboarding") &&
-    !pathname.startsWith("/api/")
-  ) {
+  // Redirect incomplete onboarding — skip for profile/settings/api paths
+  const SKIP_ONBOARDING_CHECK = [
+    "/onboarding",
+    "/profile",
+    "/settings",
+    "/api/",
+  ];
+  const shouldCheckOnboarding = !SKIP_ONBOARDING_CHECK.some(p => pathname.startsWith(p));
+
+  if (shouldCheckOnboarding && !session.onboardingDone) {
     return NextResponse.redirect(new URL("/onboarding", req.url));
   }
 

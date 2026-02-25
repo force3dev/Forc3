@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { AI_MODELS } from "@/lib/ai/models";
 
 export const dynamic = "force-dynamic";
 
@@ -129,7 +130,7 @@ Return a JSON object with adaptations:
 Return only the JSON.`;
 
     const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODELS.BALANCED,
       max_tokens: 2048,
       messages: [{ role: "user", content: prompt }],
     });

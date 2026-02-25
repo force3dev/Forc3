@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { naturalLanguageLog } from "@/lib/nutritionix";
 import Anthropic from "@anthropic-ai/sdk";
+import { AI_MODELS } from "@/lib/ai/models";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
 
   // Fall back to Claude for estimation
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: AI_MODELS.FAST,
     max_tokens: 1024,
     system: `You are a nutrition expert. When given a food description, return ONLY a JSON array of food items with estimated nutrition.
 Format: [{"name": "...", "servingSize": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0}]

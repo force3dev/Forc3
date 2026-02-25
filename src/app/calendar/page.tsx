@@ -1,364 +1,432 @@
 "use client";
-
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import useSWR from "swr";
+import { format, addWeeks, subWeeks, addMonths, subMonths } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
+import { haptics } from "@/lib/haptics";
+import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import BottomNav from "@/components/shared/BottomNav";
 
-type DayType = "strength" | "cardio" | "hybrid" | "rest" | "active_recovery";
+const fetcher = (url: string) => fetch(url).then(r => r.json());
 
-type CalendarDay = {
-  date: string;
-  dayNumber: number;
-  dayOfWeek: string;
-  type: DayType;
-  strength: {
-    name: string;
-    focus: string;
-    exerciseCount: number;
-    estimatedDuration: number;
-    completed: boolean;
-    workoutId?: string;
-    logId?: string;
-  } | null;
-  cardio: {
-    title: string;
-    type: string;
-    duration: number;
-    intensity: string;
-    completed: boolean;
-    logId?: string;
-  } | null;
-  completed: boolean;
-  isToday: boolean;
-  isPast: boolean;
-};
+type ViewMode = "week" | "month";
 
 const CARDIO_ICONS: Record<string, string> = {
-  running: "🏃",
-  cycling: "🚴",
-  swimming: "🏊",
-  hiit: "⚡",
-  rowing: "🚣",
-  jump_rope: "🪢",
-  walking: "🚶",
-  run: "🏃",
-  bike: "🚴",
-  swim: "🏊",
+  run: "🏃", bike: "🚴", swim: "🏊", row: "🚣", hike: "🥾",
+  walk: "🚶", hiit: "⚡", sprint: "💨", default: "🏋️",
 };
-
-const INTENSITY_COLOR: Record<string, string> = {
-  easy: "#22c55e",
-  moderate: "#f59e0b",
-  hard: "#ef4444",
-  max: "#a855f7",
-};
-
-function ringColor(day: CalendarDay): string {
-  if (day.completed) return "#22c55e";
-  if (day.isPast && day.type !== "rest" && day.type !== "active_recovery") return "#ef4444";
-  if (day.isToday) return "#0066FF";
-  return "transparent";
-}
 
 export default function CalendarPage() {
-  const router = useRouter();
-  const [view, setView] = useState<"week" | "month">("week");
-  const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
-  const [days, setDays] = useState<CalendarDay[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [view, setView] = useState<ViewMode>("week");
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  const { data, isLoading } = useSWR(
+    `/api/calendar?view=${view}&date=${currentDate.toISOString()}`,
+    fetcher,
+    { revalidateOnFocus: true }
+  );
+
+  const swipeHandlers = useSwipeGesture({
+    onSwipeLeft: () => navigate("forward"),
+    onSwipeRight: () => navigate("back"),
   });
 
-  const fetchCalendar = useCallback(async (month: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/calendar?month=${month}`);
-      const data = await res.json();
-      setDays(data.days || []);
-    } catch {
-      setDays([]);
-    } finally {
-      setLoading(false);
+  function navigate(dir: "forward" | "back") {
+    haptics.light();
+    if (view === "week") {
+      setCurrentDate(dir === "forward" ? addWeeks(currentDate, 1) : subWeeks(currentDate, 1));
+    } else {
+      setCurrentDate(dir === "forward" ? addMonths(currentDate, 1) : subMonths(currentDate, 1));
     }
-  }, []);
-
-  useEffect(() => {
-    fetchCalendar(currentMonth);
-  }, [currentMonth, fetchCalendar]);
-
-  const today = new Date();
-  const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - today.getDay());
-  const weekDates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
-  const weekDays = days.filter((d) => weekDates.includes(d.date));
-
-  function prevMonth() {
-    const [y, m] = currentMonth.split("-").map(Number);
-    setCurrentMonth(m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`);
   }
 
-  function nextMonth() {
-    const [y, m] = currentMonth.split("-").map(Number);
-    setCurrentMonth(m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`);
-  }
-
-  const monthLabel = new Date(`${currentMonth}-01`).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
-  const firstDayOfMonth = new Date(`${currentMonth}-01`).getDay();
+  const selectedDayData = data?.days?.find((d: any) => d.date === selectedDate);
+  const today = format(new Date(), "yyyy-MM-dd");
 
   return (
-    <main className="min-h-screen bg-black text-white pb-28">
-      <header className="px-5 pt-8 pb-4">
-        <h1 className="text-xl font-bold">Training Calendar</h1>
-
-        <div className="flex bg-[#141414] rounded-xl p-1 gap-1 mt-3">
-          {(["week", "month"] as const).map((v) => (
+    <div className="min-h-dvh bg-black text-white pb-24">
+      {/* Header */}
+      <div className="px-5 pt-8 pb-2">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-black">
+            {view === "week"
+              ? `Week of ${format(currentDate, "MMM d")}`
+              : format(currentDate, "MMMM yyyy")
+            }
+          </h1>
+          <div className="flex items-center gap-2">
             <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg capitalize transition-colors ${
-                view === v ? "bg-[#0066FF] text-white" : "text-neutral-400"
-              }`}
+              onClick={() => { setCurrentDate(new Date()); setSelectedDate(today); haptics.light(); }}
+              className="text-[#00C853] text-sm font-semibold px-3 py-1.5 rounded-xl bg-[#00C853]/10"
             >
-              {v}
+              Today
             </button>
-          ))}
-        </div>
-
-        {view === "month" && (
-          <div className="flex items-center justify-between mt-4">
-            <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#1a1a1a] text-neutral-400">
-              ←
-            </button>
-            <span className="font-semibold text-sm">{monthLabel}</span>
-            <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#1a1a1a] text-neutral-400">
-              →
-            </button>
-          </div>
-        )}
-      </header>
-
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="w-6 h-6 border-2 border-[#0066FF] border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : view === "week" ? (
-        <WeekView days={weekDays} onSelect={setSelectedDay} />
-      ) : (
-        <MonthView days={days} firstDayOffset={firstDayOfMonth} onSelect={setSelectedDay} />
-      )}
-
-      {selectedDay && (
-        <DayBottomSheet
-          day={selectedDay}
-          onClose={() => setSelectedDay(null)}
-          onNavigate={(path) => {
-            setSelectedDay(null);
-            router.push(path);
-          }}
-        />
-      )}
-
-      <BottomNav active="workout" />
-    </main>
-  );
-}
-
-function WeekView({ days, onSelect }: { days: CalendarDay[]; onSelect: (d: CalendarDay) => void }) {
-  return (
-    <div className="px-4 grid grid-cols-7 gap-1.5">
-      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-        <div key={d} className="text-center text-[10px] text-neutral-600 font-medium py-1">
-          {d}
-        </div>
-      ))}
-      {days.map((day) => (
-        <button key={day.date} onClick={() => onSelect(day)} className="flex flex-col items-center gap-1 py-2">
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold relative"
-            style={{
-              border: `2px solid ${ringColor(day)}`,
-              background: day.isToday ? "#0066FF20" : "transparent",
-              color: day.isToday ? "#0066FF" : "#fff",
-            }}
-          >
-            {day.dayNumber}
-          </div>
-          <div className="flex flex-wrap justify-center gap-0.5">
-            {day.strength && <span className="text-xs">💪</span>}
-            {day.cardio && <span className="text-xs">{CARDIO_ICONS[day.cardio.type] || "🏃"}</span>}
-            {day.type === "rest" && <span className="text-xs">😴</span>}
-            {day.type === "active_recovery" && <span className="text-xs">🧘</span>}
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function MonthView({
-  days,
-  firstDayOffset,
-  onSelect,
-}: {
-  days: CalendarDay[];
-  firstDayOffset: number;
-  onSelect: (d: CalendarDay) => void;
-}) {
-  return (
-    <div className="px-4">
-      <div className="grid grid-cols-7 mb-1">
-        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-          <div key={i} className="text-center text-[10px] text-neutral-600 font-medium py-1">
-            {d}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-0.5">
-        {Array.from({ length: firstDayOffset }).map((_, i) => (
-          <div key={`empty-${i}`} className="aspect-square" />
-        ))}
-
-        {days.map((day) => (
-          <button
-            key={day.date}
-            onClick={() => onSelect(day)}
-            className={`aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
-              day.isToday ? "bg-[#0066FF20] border border-[#0066FF40]" : "hover:bg-[#1a1a1a]"
-            }`}
-          >
-            <span className={`text-xs font-semibold ${day.isToday ? "text-[#0066FF]" : "text-white"}`}>{day.dayNumber}</span>
-            <div className="flex gap-0.5">
-              {day.strength && <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />}
-              {day.cardio && <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" />}
-              {(day.type === "rest" || day.type === "active_recovery") && !day.strength && !day.cardio && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[#6b7280]" />
-              )}
+            <div className="flex bg-[#141414] rounded-xl p-1">
+              {(["week", "month"] as ViewMode[]).map(v => (
+                <button
+                  key={v}
+                  onClick={() => { setView(v); haptics.light(); }}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                    view === v ? "bg-white text-black" : "text-neutral-400"
+                  }`}
+                >
+                  {v === "week" ? "W" : "M"}
+                </button>
+              ))}
             </div>
-            {day.completed && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#22c55e]" />}
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => navigate("back")} className="p-2 text-neutral-400 active:scale-90 transition-transform">
+            ←
           </button>
-        ))}
+          <div className="flex-1" />
+          <button onClick={() => navigate("forward")} className="p-2 text-neutral-400 active:scale-90 transition-transform">
+            →
+          </button>
+        </div>
       </div>
 
-      <div className="flex gap-4 mt-4 px-2 justify-center">
-        <span className="flex items-center gap-1 text-xs text-neutral-500">
-          <span className="w-2 h-2 rounded-full bg-[#22c55e]" /> Strength
-        </span>
-        <span className="flex items-center gap-1 text-xs text-neutral-500">
-          <span className="w-2 h-2 rounded-full bg-[#3b82f6]" /> Cardio
-        </span>
-        <span className="flex items-center gap-1 text-xs text-neutral-500">
-          <span className="w-2 h-2 rounded-full bg-[#6b7280]" /> Rest
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function DayBottomSheet({
-  day,
-  onClose,
-  onNavigate,
-}: {
-  day: CalendarDay;
-  onClose: () => void;
-  onNavigate: (path: string) => void;
-}) {
-  const date = new Date(`${day.date}T12:00:00`);
-  const dateLabel = date
-    .toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
-    .toUpperCase();
-  const totalMin = (day.strength?.estimatedDuration || 0) + (day.cardio?.duration || 0);
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/70 z-40" onClick={onClose} />
-
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#141414] rounded-t-3xl p-6 pb-10 max-h-[80vh] overflow-y-auto">
-        <div className="w-10 h-1 bg-[#333] rounded-full mx-auto mb-5" />
-        <p className="text-xs text-neutral-500 font-semibold tracking-widest mb-4">{dateLabel}</p>
-
-        {(day.type === "rest" || day.type === "active_recovery") && !day.strength && !day.cardio && (
-          <div className="space-y-3">
-            <div className="text-4xl text-center mb-2">{day.type === "rest" ? "😴" : "🧘"}</div>
-            <h2 className="text-xl font-bold text-center">{day.type === "rest" ? "Rest Day" : "Active Recovery"}</h2>
-            <p className="text-neutral-400 text-sm text-center leading-relaxed">
-              {day.type === "rest"
-                ? "Take it easy today. Your body gets stronger when it rests."
-                : "Light movement only. Easy walk, stretching, or foam rolling."}
-            </p>
-            <div className="bg-[#1a1a1a] rounded-2xl p-4 mt-2">
-              <p className="text-xs text-neutral-500 mb-2">Suggestions</p>
-              <p className="text-sm text-neutral-300">Easy walk · Stretching · Foam rolling · Yoga</p>
-            </div>
+      {/* Calendar Grid */}
+      <div {...swipeHandlers} className="px-5">
+        {view === "week" ? (
+          <div className="flex gap-2 mb-6">
+            {isLoading ? (
+              Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="flex-1 h-20 bg-[#141414] rounded-2xl animate-pulse" />
+              ))
+            ) : (
+              data?.days?.map((day: any) => {
+                const isSelected = day.date === selectedDate;
+                return (
+                  <button
+                    key={day.date}
+                    onClick={() => { setSelectedDate(day.date); haptics.light(); }}
+                    className={`flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl transition-all active:scale-95 ${
+                      isSelected ? "bg-white text-black" : "bg-[#141414]"
+                    }`}
+                  >
+                    <span className={`text-[11px] font-medium ${isSelected ? "text-black/60" : "text-neutral-500"}`}>
+                      {day.dayShort?.toUpperCase()}
+                    </span>
+                    <span className={`text-lg font-black ${
+                      isSelected ? "text-black" : day.isToday ? "text-[#00C853]" : "text-white"
+                    }`}>
+                      {day.dayNumber}
+                    </span>
+                    <div className="flex gap-0.5 items-center">
+                      {day.workout && (
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          day.status === "completed" ? "bg-[#00C853]" :
+                          day.status === "missed" ? "bg-red-500" :
+                          day.isToday ? "bg-white" : "bg-neutral-600"
+                        }`} />
+                      )}
+                      {day.cardio && (
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          day.cardioLog ? "bg-blue-400" :
+                          day.status === "missed" ? "bg-red-500/50" :
+                          day.isToday ? "bg-white/60" : "bg-neutral-700"
+                        }`} />
+                      )}
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
-        )}
+        ) : (
+          <div className="mb-6">
+            <div className="grid grid-cols-7 mb-2">
+              {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+                <div key={i} className="text-center text-neutral-600 text-xs font-medium py-1">{d}</div>
+              ))}
+            </div>
 
-        {day.strength && (
-          <div className="bg-[#1a1a1a] rounded-2xl p-4 mb-3">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">💪</span>
-              <div>
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Strength</p>
-                <p className="font-semibold">{day.strength.focus || day.strength.name}</p>
+            {isLoading ? (
+              <div className="grid grid-cols-7 gap-1">
+                {Array.from({ length: 35 }).map((_, i) => (
+                  <div key={i} className="aspect-square bg-[#141414] rounded-xl animate-pulse" />
+                ))}
               </div>
-              {day.strength.completed && <span className="ml-auto text-[#22c55e] text-xs font-semibold">✓ Done</span>}
-            </div>
-            <div className="flex gap-3 text-xs text-neutral-500 mb-3">
-              {day.strength.exerciseCount > 0 && <span>{day.strength.exerciseCount} exercises</span>}
-              <span>~{day.strength.estimatedDuration} min</span>
-            </div>
-            {day.strength.workoutId && (
-              <button
-                onClick={() => onNavigate(`/workout/${day.strength!.workoutId}`)}
-                className="w-full py-2.5 bg-[#0066FF] rounded-xl text-sm font-semibold"
-              >
-                {day.strength.logId ? "View Workout →" : "Start Workout →"}
-              </button>
+            ) : (
+              <div className="grid grid-cols-7 gap-1">
+                {data?.days?.map((day: any) => {
+                  const isSelected = day.date === selectedDate;
+                  return (
+                    <button
+                      key={day.date}
+                      onClick={() => { setSelectedDate(day.date); haptics.light(); }}
+                      className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-90 ${
+                        isSelected ? "bg-white" :
+                        day.isToday ? "ring-1 ring-[#00C853]" :
+                        "bg-[#141414]/40"
+                      }`}
+                    >
+                      <span className={`text-sm font-bold ${
+                        isSelected ? "text-black" :
+                        day.isToday ? "text-[#00C853]" :
+                        day.isPast ? "text-neutral-400" : "text-white"
+                      }`}>
+                        {day.dayNumber}
+                      </span>
+                      <div className="flex gap-0.5 mt-0.5">
+                        {day.workout && (
+                          <div className={`w-1 h-1 rounded-full ${
+                            day.workoutLog ? "bg-[#00C853]" :
+                            day.status === "missed" ? "bg-red-500" :
+                            "bg-neutral-600"
+                          }`} />
+                        )}
+                        {day.cardio && (
+                          <div className={`w-1 h-1 rounded-full ${
+                            day.cardioLog ? "bg-blue-400" :
+                            day.status === "missed" ? "bg-red-500/50" :
+                            "bg-neutral-700"
+                          }`} />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
 
-        {day.cardio && (
-          <div className="bg-[#1a1a1a] rounded-2xl p-4 mb-3">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">{CARDIO_ICONS[day.cardio.type] || "🏃"}</span>
-              <div>
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Cardio</p>
-                <p className="font-semibold capitalize">{day.cardio.title}</p>
-              </div>
-              {day.cardio.completed && <span className="ml-auto text-[#22c55e] text-xs font-semibold">✓ Done</span>}
-            </div>
-            <div className="flex gap-3 text-xs mb-3">
-              <span className="text-neutral-500">{day.cardio.duration} min</span>
-              <span className="font-medium capitalize" style={{ color: INTENSITY_COLOR[day.cardio.intensity] || "#fff" }}>
-                {day.cardio.intensity}
-              </span>
-            </div>
-            <button
-              onClick={() => onNavigate("/workout/cardio")}
-              className="w-full py-2.5 bg-[#1a1a1a] border border-[#262626] rounded-xl text-sm font-medium text-neutral-300"
+        {/* Selected Day Detail */}
+        <AnimatePresence mode="wait">
+          {selectedDayData && (
+            <motion.div
+              key={selectedDate}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
             >
-              View Workout →
-            </button>
-          </div>
-        )}
+              {/* Day header */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-black">
+                    {selectedDayData.isToday ? "Today" : `${selectedDayData.dayName}, ${selectedDayData.month} ${selectedDayData.dayNumber}`}
+                  </h2>
+                  {selectedDayData.checkIn && (
+                    <p className="text-neutral-500 text-sm">
+                      Recovery: {selectedDayData.checkIn.recoveryScore}/100 · Sleep: {selectedDayData.checkIn.sleepHours}h
+                    </p>
+                  )}
+                </div>
+                <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  selectedDayData.status === "completed" ? "bg-[#00C853]/20 text-[#00C853]" :
+                  selectedDayData.status === "missed" ? "bg-red-500/20 text-red-400" :
+                  selectedDayData.status === "today" ? "bg-white/10 text-white" :
+                  selectedDayData.status === "rest" ? "bg-neutral-800 text-neutral-500" :
+                  "bg-neutral-800 text-neutral-400"
+                }`}>
+                  {selectedDayData.status === "completed" ? "✓ Completed" :
+                   selectedDayData.status === "missed" ? "✗ Missed" :
+                   selectedDayData.status === "today" ? "• Today" :
+                   selectedDayData.status === "rest" ? "😴 Rest" :
+                   "Upcoming"}
+                </div>
+              </div>
 
-        {totalMin > 0 && (
-          <div className="border-t border-[#262626] pt-3 mt-2">
-            <p className="text-xs text-neutral-500 text-center">Total: ~{totalMin} min training today</p>
+              {/* REST DAY */}
+              {selectedDayData.status === "rest" && (
+                <div className="bg-[#141414] rounded-3xl p-6">
+                  <div className="text-center mb-5">
+                    <div className="text-4xl mb-3">😴</div>
+                    <h3 className="font-bold text-lg mb-2">Rest Day</h3>
+                    <p className="text-neutral-400 text-sm leading-relaxed">
+                      Recovery is training. Your muscles grow on days like today.
+                    </p>
+                  </div>
+                  <p className="text-neutral-500 text-xs uppercase tracking-wider mb-3">Active Recovery Options</p>
+                  <div className="space-y-2">
+                    {[
+                      { name: '20-min Walk', emoji: '🚶', duration: 20, description: 'Easy zone 1, promotes blood flow' },
+                      { name: 'Yoga Flow', emoji: '🧘', duration: 30, description: 'Hip flexors, hamstrings, thoracic' },
+                      { name: 'Foam Rolling', emoji: '🔵', duration: 15, description: 'Focus on areas from last training' },
+                      { name: 'Cold/Hot Contrast', emoji: '🧊', duration: 10, description: 'Reduce inflammation' },
+                      { name: 'Mobility Work', emoji: '🤸', duration: 20, description: 'Joint health and range of motion' },
+                    ].map(opt => (
+                      <button
+                        key={opt.name}
+                        onClick={() => {
+                          haptics.light();
+                          fetch('/api/cardio/log', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ type: 'recovery', title: opt.name, duration: opt.duration, date: selectedDate })
+                          });
+                        }}
+                        className="w-full flex items-center gap-3 bg-neutral-900 rounded-2xl p-3 text-left active:scale-[0.98] transition-transform"
+                      >
+                        <span className="text-2xl">{opt.emoji}</span>
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm">{opt.name}</p>
+                          <p className="text-neutral-500 text-xs">{opt.description}</p>
+                        </div>
+                        <span className="text-neutral-600 text-xs">{opt.duration}m</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* STRENGTH WORKOUT */}
+              {selectedDayData.workout && (
+                <div className={`rounded-3xl p-5 mb-3 ${
+                  selectedDayData.workoutLog ? "bg-[#002211] border border-[#00C853]/20" : "bg-[#141414]"
+                }`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">💪</span>
+                        <span className="text-xs text-neutral-500 uppercase tracking-wider">Strength</span>
+                        {selectedDayData.workoutLog && <span className="text-xs text-[#00C853]">✓ Done</span>}
+                      </div>
+                      <h3 className="font-black text-lg">{selectedDayData.workout.name}</h3>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-neutral-500 text-xs">{selectedDayData.workout.estimatedDuration} min</p>
+                      <p className="text-neutral-500 text-xs">{selectedDayData.workout.exerciseCount} exercises</p>
+                    </div>
+                  </div>
+
+                  {selectedDayData.workoutLog && (
+                    <div className="flex gap-4 mb-4 pt-3 border-t border-[#00C853]/20">
+                      <div>
+                        <p className="text-[#00C853] font-bold">{selectedDayData.workoutLog.duration || "—"}m</p>
+                        <p className="text-neutral-500 text-xs">Duration</p>
+                      </div>
+                      <div>
+                        <p className="text-[#00C853] font-bold">{(selectedDayData.workoutLog.totalVolume || 0).toLocaleString()}</p>
+                        <p className="text-neutral-500 text-xs">Lbs lifted</p>
+                      </div>
+                      <div>
+                        <p className="text-[#00C853] font-bold">{selectedDayData.workoutLog.exerciseCount}</p>
+                        <p className="text-neutral-500 text-xs">Exercises</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {!selectedDayData.workoutLog && (selectedDayData.isToday || selectedDayData.isFuture) && (
+                    <Link
+                      href={`/workout/active/${selectedDayData.workout.id}`}
+                      className="block w-full bg-[#00C853] text-black font-bold text-center py-3 rounded-2xl active:scale-95 transition-transform"
+                    >
+                      Start Workout →
+                    </Link>
+                  )}
+                  {selectedDayData.workoutLog && (
+                    <Link href={`/workout/${selectedDayData.workoutLog.id}`} className="block text-center text-[#00C853] text-sm font-semibold py-2">
+                      View Details →
+                    </Link>
+                  )}
+                </div>
+              )}
+
+              {/* CARDIO */}
+              {selectedDayData.cardio && (
+                <div className={`rounded-3xl p-5 mb-3 ${
+                  selectedDayData.cardioLog ? "bg-blue-950/30 border border-blue-900/50" : "bg-[#141414]"
+                }`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{CARDIO_ICONS[selectedDayData.cardio.type] || "⚡"}</span>
+                        <span className="text-xs text-neutral-500 uppercase tracking-wider">Cardio</span>
+                        {selectedDayData.cardioLog && <span className="text-xs text-blue-400">✓ Done</span>}
+                      </div>
+                      <h3 className="font-black text-lg">{selectedDayData.cardio.title}</h3>
+                      <p className="text-neutral-400 text-sm capitalize">{selectedDayData.cardio.intensity} intensity</p>
+                    </div>
+                    <p className="text-neutral-500 text-sm">{selectedDayData.cardio.duration} min</p>
+                  </div>
+
+                  {selectedDayData.cardioLog && (
+                    <div className="flex gap-4 pt-3 border-t border-blue-900/30 mb-4">
+                      {selectedDayData.cardioLog.distance && (
+                        <div>
+                          <p className="text-blue-400 font-bold">{selectedDayData.cardioLog.distance.toFixed(1)} km</p>
+                          <p className="text-neutral-500 text-xs">Distance</p>
+                        </div>
+                      )}
+                      {selectedDayData.cardioLog.duration && (
+                        <div>
+                          <p className="text-blue-400 font-bold">{selectedDayData.cardioLog.duration}m</p>
+                          <p className="text-neutral-500 text-xs">Duration</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!selectedDayData.cardioLog && (selectedDayData.isToday || selectedDayData.isFuture) && (
+                    <Link href="/workout/cardio" className="block w-full bg-blue-500 text-white font-bold text-center py-3 rounded-2xl active:scale-95 transition-transform">
+                      Log Cardio →
+                    </Link>
+                  )}
+                </div>
+              )}
+
+              {/* NUTRITION SUMMARY */}
+              {selectedDayData.nutrition && (
+                <div className="bg-[#141414] rounded-3xl p-5 mb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-neutral-500 text-xs uppercase tracking-wider mb-1">Nutrition</p>
+                      <p className="font-black text-lg">{selectedDayData.nutrition.calories} <span className="text-neutral-500 font-normal text-sm">cal</span></p>
+                      <p className="text-neutral-400 text-sm">{selectedDayData.nutrition.protein}g protein</p>
+                    </div>
+                    <Link href={`/nutrition?date=${selectedDate}`} className="text-[#00C853] text-sm font-semibold">
+                      View →
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!selectedDayData.workout && !selectedDayData.cardio && selectedDayData.status !== "rest" && (
+                <div className="bg-[#141414] rounded-3xl p-6 text-center">
+                  <p className="text-neutral-500">Nothing scheduled for this day.</p>
+                  <Link href="/coach" className="text-[#00C853] text-sm mt-2 block">Ask coach to add something →</Link>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Week summary */}
+        {data?.summary && view === "week" && (
+          <div className="mt-6 bg-[#141414] rounded-3xl p-4">
+            <div className="flex justify-between text-center">
+              <div>
+                <p className="text-white font-black text-xl">{data.summary.completedWorkouts}</p>
+                <p className="text-neutral-500 text-xs">Done</p>
+              </div>
+              <div>
+                <p className="text-white font-black text-xl">{data.summary.plannedWorkouts}</p>
+                <p className="text-neutral-500 text-xs">Planned</p>
+              </div>
+              <div>
+                <p className="text-red-400 font-black text-xl">{data.summary.missedWorkouts}</p>
+                <p className="text-neutral-500 text-xs">Missed</p>
+              </div>
+              <div>
+                <p className="text-[#00C853] font-black text-xl">{data.summary.completionRate}%</p>
+                <p className="text-neutral-500 text-xs">Rate</p>
+              </div>
+            </div>
           </div>
         )}
       </div>
-    </>
+
+      <BottomNav active="home" />
+    </div>
   );
 }

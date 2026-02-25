@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { AI_MODELS } from "@/lib/ai/models";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ Write a JSON object with exactly these 4 fields (no markdown, pure JSON):
 
     const client = new Anthropic();
     const message = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODELS.BALANCED,
       max_tokens: 600,
       messages: [{ role: "user", content: prompt }],
     });

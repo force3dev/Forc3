@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useSwipe } from "@/hooks/useSwipe";
 
 type Tab = "home" | "discover" | "workout" | "coach" | "profile";
@@ -13,7 +14,7 @@ const tabs: { id: Tab; label: string; href: string; icon: React.ReactNode }[] = 
   {
     id: "home",
     label: "Home",
-    href: "/home",
+    href: "/dashboard",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -23,12 +24,12 @@ const tabs: { id: Tab; label: string; href: string; icon: React.ReactNode }[] = 
   },
   {
     id: "discover",
-    label: "Discover",
-    href: "/discover",
+    label: "Food",
+    href: "/nutrition",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
       </svg>
     ),
   },
@@ -72,34 +73,56 @@ const TAB_ORDER: Tab[] = ["home", "discover", "workout", "coach", "profile"];
 export default function BottomNav({ active }: Props) {
   const router = useRouter();
   const currentIndex = TAB_ORDER.indexOf(active);
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/notifications")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.unread) setUnread(d.unread); })
+      .catch(() => {});
+  }, []);
 
   useSwipe({
     onSwipeLeft: () => {
       if (currentIndex < TAB_ORDER.length - 1) {
-        router.push(tabs.find(t => t.id === TAB_ORDER[currentIndex + 1])!.href);
+        router.push(tabs.find((t) => t.id === TAB_ORDER[currentIndex + 1])!.href);
       }
     },
     onSwipeRight: () => {
       if (currentIndex > 0) {
-        router.push(tabs.find(t => t.id === TAB_ORDER[currentIndex - 1])!.href);
+        router.push(tabs.find((t) => t.id === TAB_ORDER[currentIndex - 1])!.href);
       }
     },
   });
 
+  function handleTap() {
+    if ("vibrate" in navigator) {
+      navigator.vibrate(10);
+    }
+  }
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-black border-t border-[#1a1a1a] px-2 py-2 safe-area-inset-bottom z-40">
+    <nav className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-sm border-t border-[#1a1a1a] px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] z-40">
       <div className="flex items-center justify-around max-w-lg mx-auto">
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <Link
             key={tab.id}
             href={tab.href}
-            className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-colors ${
+            onClick={handleTap}
+            className={`relative flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-colors active:scale-95 ${
               active === tab.id
                 ? "text-[#0066FF]"
                 : "text-[#666666] hover:text-neutral-300"
             }`}
           >
-            {tab.icon}
+            <div className="relative">
+              {tab.icon}
+              {tab.id === "profile" && unread > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center leading-none">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </div>
             <span className="text-[10px] font-medium">{tab.label}</span>
           </Link>
         ))}

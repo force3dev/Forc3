@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import MuscleDiagram from "@/components/MuscleDiagram";
+import ExerciseGif from "@/components/ExerciseGif";
 
 type ExerciseDetail = {
   id: string;
@@ -19,6 +20,7 @@ type ExerciseDetail = {
   alternativesParsed: string[];
   avoidIfInjuryParsed: string[];
   imageUrl: string | null;
+  gifUrl?: string | null;
   fatigueRating: number | null;
 };
 
@@ -91,6 +93,13 @@ export default function ExerciseDetailPage({
         </button>
         <h1 className="text-lg font-bold flex-1 line-clamp-1">{exercise.name}</h1>
       </header>
+
+      {/* Exercise GIF */}
+      {exercise.gifUrl && (
+        <div className="px-5 mb-5">
+          <ExerciseGif gifUrl={exercise.gifUrl} exerciseName={exercise.name} size="medium" />
+        </div>
+      )}
 
       {/* Badges */}
       <div className="px-5 flex flex-wrap gap-2 mb-5">

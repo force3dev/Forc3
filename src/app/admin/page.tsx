@@ -38,7 +38,7 @@ export default function AdminPage() {
 
         {/* Admin nav */}
         <div className="flex gap-2">
-          {[{ label: "Overview", href: "/admin" }, { label: "Users", href: "/admin/users" }, { label: "Analytics", href: "/admin/analytics" }].map(n => (
+          {[{ label: "Overview", href: "/admin" }, { label: "Users", href: "/admin/users" }, { label: "Analytics", href: "/admin/analytics" }, { label: "Content", href: "/admin/content" }].map(n => (
             <Link key={n.href} href={n.href} className="px-4 py-2 bg-[#141414] border border-[#262626] rounded-xl text-sm hover:border-[#0066FF] transition-colors">
               {n.label}
             </Link>

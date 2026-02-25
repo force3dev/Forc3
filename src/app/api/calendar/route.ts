@@ -1,177 +1,231 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, format, isToday, isPast, isFuture } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
-// Returns full month calendar data — strength + cardio + rest
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  // month=YYYY-MM, defaults to current month
-  const monthParam = searchParams.get("month");
-  const now = new Date();
-  const year = monthParam ? parseInt(monthParam.split("-")[0]) : now.getFullYear();
-  const month = monthParam ? parseInt(monthParam.split("-")[1]) - 1 : now.getMonth();
+  try {
+    const { searchParams } = new URL(request.url);
+    const view = searchParams.get("view") || "week";
+    const dateParam = searchParams.get("date") || new Date().toISOString();
+    const currentDate = new Date(dateParam);
 
-  const startOfMonth = new Date(year, month, 1);
-  const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
+    let rangeStart: Date;
+    let rangeEnd: Date;
 
-  // Fetch strength plan workouts
-  const plan = await prisma.trainingPlan.findUnique({
-    where: { userId },
-    include: {
-      workouts: {
-        include: { exercises: { include: { exercise: { select: { name: true } } } } },
-      },
-    },
-  });
+    if (view === "month") {
+      rangeStart = startOfMonth(currentDate);
+      rangeEnd = endOfMonth(currentDate);
+    } else {
+      rangeStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+      rangeEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
+    }
 
-  // Fetch completed workout logs this month
-  const workoutLogs = await prisma.workoutLog.findMany({
-    where: { userId, startedAt: { gte: startOfMonth, lte: endOfMonth } },
-    include: {
-      workout: {
-        select: {
-          id: true,
-          name: true,
-          order: true,
-          exercises: { select: { id: true } },
+    const allDays = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    // Fetch ALL data for the range in parallel
+    const [plan, workoutLogs, cardioActivities, nutritionLogs, checkIns] = await Promise.all([
+      prisma.trainingPlan.findUnique({
+        where: { userId },
+        include: {
+          workouts: {
+            include: {
+              exercises: { include: { exercise: { select: { name: true } } } },
+            },
+          },
         },
+      }),
+      prisma.workoutLog.findMany({
+        where: {
+          userId,
+          startedAt: { gte: rangeStart, lte: rangeEnd },
+        },
+        include: {
+          workout: { select: { name: true, dayOfWeek: true } },
+          exerciseLogs: {
+            include: {
+              exercise: { select: { name: true } },
+              sets: { select: { weight: true, reps: true } },
+            },
+          },
+        },
+        orderBy: { startedAt: "asc" },
+      }),
+      prisma.cardioActivity.findMany({
+        where: {
+          userId,
+          OR: [
+            { date: { gte: rangeStart, lte: rangeEnd } },
+            { createdAt: { gte: rangeStart, lte: rangeEnd } },
+          ],
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.nutritionLog.findMany({
+        where: { userId, date: { gte: rangeStart, lte: rangeEnd } },
+        select: { date: true, calories: true, protein: true },
+      }),
+      prisma.morningCheckIn.findMany({
+        where: { userId, date: { gte: rangeStart, lte: rangeEnd } },
+        select: { date: true, recoveryScore: true, sleepHours: true },
+      }),
+    ]);
+
+    // Build nutrition per-day map
+    const nutritionByDay: Record<string, { calories: number; protein: number }> = {};
+    for (const n of nutritionLogs) {
+      const dateKey = format(n.date, "yyyy-MM-dd");
+      if (!nutritionByDay[dateKey]) nutritionByDay[dateKey] = { calories: 0, protein: 0 };
+      nutritionByDay[dateKey].calories += n.calories || 0;
+      nutritionByDay[dateKey].protein += n.protein || 0;
+    }
+
+    // Build check-in per-day map
+    const checkInByDay: Record<string, { recoveryScore: number | null; sleepHours: number | null }> = {};
+    for (const c of checkIns) {
+      const dateKey = format(c.date, "yyyy-MM-dd");
+      checkInByDay[dateKey] = { recoveryScore: c.recoveryScore, sleepHours: c.sleepHours };
+    }
+
+    // Build workout logs per-day map
+    const workoutLogsByDay: Record<string, typeof workoutLogs> = {};
+    for (const log of workoutLogs) {
+      const dateKey = format(log.startedAt, "yyyy-MM-dd");
+      if (!workoutLogsByDay[dateKey]) workoutLogsByDay[dateKey] = [];
+      workoutLogsByDay[dateKey].push(log);
+    }
+
+    // Build cardio per-day map
+    const cardioByDay: Record<string, typeof cardioActivities> = {};
+    for (const c of cardioActivities) {
+      const dateKey = c.date ? format(c.date, "yyyy-MM-dd") : format(c.createdAt, "yyyy-MM-dd");
+      if (!cardioByDay[dateKey]) cardioByDay[dateKey] = [];
+      cardioByDay[dateKey].push(c);
+    }
+
+    // Build calendar days
+    const calendarDays = allDays.map(day => {
+      const dateStr = format(day, "yyyy-MM-dd");
+      const dayOfWeek = day.getDay();
+      const dayName = dayNames[dayOfWeek];
+
+      // Find planned workout for this day of week
+      const plannedWorkout = plan?.workouts.find(w => w.dayOfWeek === dayOfWeek) || null;
+
+      // Find planned cardio for this day of week (from cardio activities without a specific date)
+      const plannedCardio = cardioActivities.find(c =>
+        !c.completed && c.date && format(c.date, "yyyy-MM-dd") === dateStr
+      ) || null;
+
+      // Find actual logs for this date
+      const dayWorkoutLogs = workoutLogsByDay[dateStr] || [];
+      const dayCardioLogs = (cardioByDay[dateStr] || []).filter(c => c.completed);
+
+      const completedWorkoutLog = dayWorkoutLogs.find(l => !!l.completedAt) || null;
+      const completedCardioLog = dayCardioLogs[0] || null;
+
+      // Compute volume for completed workout
+      let totalVolume = 0;
+      if (completedWorkoutLog) {
+        totalVolume = completedWorkoutLog.exerciseLogs.reduce(
+          (sum, el) => sum + el.sets.reduce((s, set) => s + set.weight * set.reps, 0),
+          0
+        );
+      }
+
+      // Determine status
+      const hasPlannedActivity = !!plannedWorkout || !!plannedCardio;
+      const hasCompletedActivity = !!completedWorkoutLog || !!completedCardioLog;
+      const dayIsToday = isToday(day);
+      const dayIsPast = isPast(day) && !dayIsToday;
+      const dayIsFuture = isFuture(day) && !dayIsToday;
+
+      let status: "completed" | "partial" | "missed" | "today" | "upcoming" | "rest";
+      if (!hasPlannedActivity && !hasCompletedActivity) {
+        status = "rest";
+      } else if (dayIsToday) {
+        status = hasCompletedActivity ? "completed" : "today";
+      } else if (dayIsPast) {
+        status = hasCompletedActivity ? "completed" : hasPlannedActivity ? "missed" : "rest";
+      } else {
+        status = hasPlannedActivity ? "upcoming" : "rest";
+      }
+
+      return {
+        date: dateStr,
+        dayName,
+        dayShort: dayName.slice(0, 3),
+        dayNumber: day.getDate(),
+        month: format(day, "MMM"),
+        isToday: dayIsToday,
+        isPast: dayIsPast,
+        isFuture: dayIsFuture,
+        status,
+        workout: plannedWorkout ? {
+          id: plannedWorkout.id,
+          name: plannedWorkout.name,
+          focus: plannedWorkout.name,
+          estimatedDuration: 60,
+          exerciseCount: plannedWorkout.exercises.length,
+          completed: !!completedWorkoutLog,
+          type: "strength",
+        } : null,
+        cardio: plannedCardio ? {
+          id: plannedCardio.id,
+          title: plannedCardio.title || plannedCardio.type,
+          type: plannedCardio.type,
+          duration: plannedCardio.duration || 0,
+          intensity: plannedCardio.intensity || "moderate",
+          completed: plannedCardio.completed,
+        } : null,
+        workoutLog: completedWorkoutLog ? {
+          id: completedWorkoutLog.id,
+          name: completedWorkoutLog.workout?.name || "Workout",
+          duration: completedWorkoutLog.duration,
+          totalVolume: Math.round(totalVolume),
+          exerciseCount: completedWorkoutLog.exerciseLogs.length,
+        } : null,
+        cardioLog: completedCardioLog ? {
+          id: completedCardioLog.id,
+          type: completedCardioLog.type,
+          duration: completedCardioLog.duration,
+          distance: completedCardioLog.distance,
+        } : null,
+        nutrition: nutritionByDay[dateStr] ? {
+          calories: Math.round(nutritionByDay[dateStr].calories),
+          protein: Math.round(nutritionByDay[dateStr].protein),
+        } : null,
+        checkIn: checkInByDay[dateStr] || null,
+      };
+    });
+
+    // Summary stats
+    const completedWorkouts = calendarDays.filter(d => d.workoutLog).length;
+    const plannedWorkouts = calendarDays.filter(d => d.workout && d.status !== "rest").length;
+    const missedWorkouts = calendarDays.filter(d => d.status === "missed").length;
+
+    return NextResponse.json({
+      days: calendarDays,
+      view,
+      currentDate: format(currentDate, "yyyy-MM-dd"),
+      rangeStart: format(rangeStart, "yyyy-MM-dd"),
+      rangeEnd: format(rangeEnd, "yyyy-MM-dd"),
+      summary: {
+        completedWorkouts,
+        plannedWorkouts,
+        missedWorkouts,
+        completionRate: plannedWorkouts > 0 ? Math.round((completedWorkouts / plannedWorkouts) * 100) : 0,
       },
-    },
-    orderBy: { startedAt: "asc" },
-  });
-
-  // Fetch cardio logs this month — use date field if set, else createdAt
-  const cardioLogs = await prisma.cardioActivity.findMany({
-    where: {
-      userId,
-      OR: [
-        { date: { gte: startOfMonth, lte: endOfMonth } },
-        { date: null, createdAt: { gte: startOfMonth, lte: endOfMonth } },
-      ],
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
-  // Build a day-by-day map
-  const daysInMonth = endOfMonth.getDate();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Map workout logs by date string
-  const strengthByDate: Record<string, typeof workoutLogs[0][]> = {};
-  for (const log of workoutLogs) {
-    const d = log.startedAt.toISOString().slice(0, 10);
-    if (!strengthByDate[d]) strengthByDate[d] = [];
-    strengthByDate[d].push(log);
-  }
-
-  // Map cardio logs by date string — prefer date field over createdAt
-  const cardioByDate: Record<string, typeof cardioLogs[0][]> = {};
-  for (const log of cardioLogs) {
-    const d = (log.date || log.createdAt).toISOString().slice(0, 10);
-    if (!cardioByDate[d]) cardioByDate[d] = [];
-    cardioByDate[d].push(log);
-  }
-
-  // Determine which days have scheduled strength workouts
-  // If plan exists, the daysPerWeek tells us how many training days per week.
-  // We map workout order to days of week (Monday=0 through Sunday=6).
-  const scheduledWorkoutDays = plan
-    ? plan.workouts.map((w, i) => ({ dayIndex: i % 7, workout: w }))
-    : [];
-
-  const days = [];
-  for (let d = 1; d <= daysInMonth; d++) {
-    const date = new Date(year, month, d);
-    const dateStr = date.toISOString().slice(0, 10);
-    const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon...
-    const isToday = date.getTime() === today.getTime();
-    const isPast = date < today;
-
-    // Get actual logs for this day
-    const dayStrength = strengthByDate[dateStr] || [];
-    const dayCardio = cardioByDate[dateStr] || [];
-
-    // Find scheduled strength workout for this day of week
-    const scheduled = scheduledWorkoutDays.find(sw => {
-      // Map plan day index: workout 0 = Monday, 1 = Tuesday, etc.
-      const mappedDay = (sw.dayIndex + 1) % 7; // 0=Sun, 1=Mon...
-      return mappedDay === dayOfWeek;
     });
-
-    const hasStrengthCompleted = dayStrength.some(l => l.completedAt);
-    const hasCardioCompleted = dayCardio.some(l => l.completed);
-    const hasAnyCompleted = hasStrengthCompleted || hasCardioCompleted;
-
-    // Determine type
-    let type: "strength" | "cardio" | "hybrid" | "rest" | "active_recovery";
-    if (dayStrength.length > 0 && dayCardio.length > 0) type = "hybrid";
-    else if (dayStrength.length > 0) type = "strength";
-    else if (dayCardio.length > 0) type = "cardio";
-    else if (scheduled) type = "strength"; // planned but not done yet
-    else if (dayOfWeek === 0) type = "active_recovery"; // Sunday default
-    else type = "rest";
-
-    // Strength info
-    let strengthData = null;
-    if (dayStrength.length > 0) {
-      const log = dayStrength[0];
-      strengthData = {
-        name: log.workout?.name || "Strength",
-        focus: log.workout?.name || "Strength",
-        exerciseCount: log.workout?.exercises?.length || 0,
-        estimatedDuration: log.duration || 45,
-        completed: !!log.completedAt,
-        logId: log.id,
-        workoutId: log.workoutId,
-      };
-    } else if (scheduled) {
-      const w = scheduled.workout;
-      strengthData = {
-        name: w.name,
-        focus: w.name,
-        exerciseCount: w.exercises.length,
-        estimatedDuration: Math.round(w.exercises.length * 8 + 10),
-        completed: false,
-        workoutId: w.id,
-      };
-    }
-
-    // Cardio info
-    let cardioData = null;
-    if (dayCardio.length > 0) {
-      const log = dayCardio[0];
-      const durationRaw = log.duration || 0;
-      const durationMinutes = durationRaw > 240 ? Math.round(durationRaw / 60) : durationRaw;
-      cardioData = {
-        title: log.title || log.type,
-        type: log.type,
-        duration: durationMinutes,
-        intensity: log.intensity || "moderate",
-        completed: log.completed,
-        logId: log.id,
-      };
-    }
-
-    const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-    days.push({
-      date: dateStr,
-      dayNumber: d,
-      dayOfWeek: DAY_NAMES[dayOfWeek],
-      type,
-      strength: strengthData,
-      cardio: cardioData,
-      completed: hasAnyCompleted,
-      isToday,
-      isPast,
-    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Calendar error:", message);
+    return NextResponse.json({ error: "Calendar unavailable" }, { status: 503 });
   }
-
-  return NextResponse.json({ days, month: `${year}-${String(month + 1).padStart(2, "0")}` });
 }

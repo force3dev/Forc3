@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { analyzeWeek } from "@/lib/ai/weeklyAdaptation";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { AI_MODELS } from "@/lib/ai/models";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,7 @@ Be real and specific. Reference actual numbers.
 End with one key focus for next week.`;
 
     const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODELS.BALANCED,
       max_tokens: 250,
       messages: [{ role: "user", content: prompt }],
     });

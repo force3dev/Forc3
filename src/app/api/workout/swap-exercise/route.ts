@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
 import { EXERCISE_DATABASE, getExerciseById } from "@/lib/exercise-database";
+import { AI_MODELS } from "@/lib/ai/models";
 
 const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
 
@@ -43,7 +44,7 @@ Suggest exactly 3 alternative exercises. For each provide:
 Respond as JSON array: [{ "name": "...", "reason": "...", "tip": "..." }]`;
 
   const msg = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: AI_MODELS.FAST,
     max_tokens: 600,
     messages: [{ role: "user", content: prompt }],
   });

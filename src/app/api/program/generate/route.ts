@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { generateAIProgram, AIProgramInput, AIGeneratedExercise } from "@/lib/ai/claude";
+import { rateLimit } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,8 @@ async function saveGeneratedProgram(
         create: workoutDays.map((day, idx) => ({
           name: day.workout!.name,
           order: idx + 1,
+          // Map AI day number (1=Mon…7=Sun) to JS getDay() (0=Sun,1=Mon…6=Sat)
+          dayOfWeek: day.day === 7 ? 0 : day.day,
           exercises: {
             create: day.workout!.exercises.map((ex: AIGeneratedExercise, exIdx: number) => {
               const { min, max } = parseReps(ex.reps);
@@ -118,6 +121,12 @@ async function saveGeneratedProgram(
 export async function POST(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Max 3 program regenerations per day
+  const { allowed } = rateLimit(`program:${userId}`, 3, 24 * 60 * 60 * 1000);
+  if (!allowed) {
+    return NextResponse.json({ error: "Program generation limit reached. Try again tomorrow." }, { status: 429 });
+  }
 
   try {
     // Get user profile to build input

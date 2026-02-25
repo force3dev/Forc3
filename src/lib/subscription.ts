@@ -42,3 +42,20 @@ export function getRemainingMessages(
 ): number {
   return Math.max(0, LIMITS[tier].aiMessagesPerDay - usedToday)
 }
+
+// Server-side premium check using Prisma
+export async function isPremiumUser(userId: string): Promise<boolean> {
+  // Dynamic import to avoid circular deps in client code
+  const { prisma } = await import('@/lib/prisma')
+
+  const sub = await prisma.subscription.findUnique({
+    where: { userId },
+    select: { tier: true, status: true, trialEnd: true }
+  })
+
+  if (!sub) return false
+  if (sub.tier !== 'free' && sub.status === 'active') return true
+  if (sub.trialEnd && new Date(sub.trialEnd) > new Date()) return true
+
+  return false
+}

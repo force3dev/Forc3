@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/session';
 import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_MODELS } from '@/lib/ai/models';
 export const dynamic = 'force-dynamic';
 
 const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY! });
@@ -37,7 +38,7 @@ Phase: ${target?.phase || 'maintain'}
 Give specific, actionable nutrition advice for today. Reference what they've eaten. Suggest foods to hit remaining targets. Under 80 words. Coach tone.`;
 
   const msg = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: AI_MODELS.BALANCED,
     max_tokens: 200,
     messages: [{ role: 'user', content: prompt }],
   });

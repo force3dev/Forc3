@@ -30,7 +30,7 @@ interface TrendingWorkout {
 interface FeedActivity {
   id: string;
   type: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   createdAt: string;
   user: {
     id: string;
@@ -38,6 +38,20 @@ interface FeedActivity {
     displayName: string | null;
     avatarUrl: string | null;
   };
+}
+
+interface SuggestionUser {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  isPrivate: boolean;
+  followerCount: number;
+  streak: number;
+  level: number;
+  goal: string | null;
+  mutualCount: number;
+  isFollowing: boolean;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -67,13 +81,13 @@ function ActivityCard({ activity }: { activity: FeedActivity }) {
             <p className="text-sm">
               <span className="font-semibold">{name}</span>
               {" "}completed{" "}
-              <span className="text-[#0066FF]">{String(data.workoutName || "a workout")}</span>
+              <span className="text-[#0066FF]">{typeof data.workoutName === "string" ? data.workoutName : "a workout"}</span>
             </p>
             <div className="flex gap-3 mt-1.5 text-xs text-neutral-500">
-              {data.duration && <span>{String(data.duration)} min</span>}
-              {data.exercises && <span>{String(data.exercises)} exercises</span>}
+              {data.duration != null && <span>{String(data.duration)} min</span>}
+              {data.exercises != null && <span>{String(data.exercises)} exercises</span>}
               {Number(data.prs) > 0 && (
-                <span className="text-[#FFB300]">🏆 {String(data.prs)} PRs</span>
+                <span className="text-[#FFB300]">🏆 {Number(data.prs)} PRs</span>
               )}
             </div>
           </div>
@@ -84,9 +98,9 @@ function ActivityCard({ activity }: { activity: FeedActivity }) {
             <p className="text-sm">
               <span className="font-semibold">{name}</span>
               {" "}hit a new PR on{" "}
-              <span className="text-[#0066FF]">{String(data.exercise || "")}</span>
+              <span className="text-[#0066FF]">{typeof data.exercise === "string" ? data.exercise : ""}</span>
             </p>
-            {data.weight && data.reps && (
+            {data.weight != null && data.reps != null && (
               <p className="text-xl font-bold mt-1">
                 {String(data.weight)} lbs × {String(data.reps)}
               </p>
@@ -98,7 +112,7 @@ function ActivityCard({ activity }: { activity: FeedActivity }) {
           <p className="text-sm">
             <span className="font-semibold">{name}</span>
             {" "}reached a{" "}
-            <span className="text-orange-400 font-bold">{String(data.days)} day streak 🔥</span>
+            <span className="text-orange-400 font-bold">{Number(data.days || 0)} day streak 🔥</span>
           </p>
         );
       case "cardio_completed":
@@ -107,13 +121,13 @@ function ActivityCard({ activity }: { activity: FeedActivity }) {
             <p className="text-sm">
               <span className="font-semibold">{name}</span>
               {" "}completed a{" "}
-              <span className="text-[#0066FF] capitalize">{String(data.cardioType || "cardio")}</span>
+              <span className="text-[#0066FF] capitalize">{typeof data.cardioType === "string" ? data.cardioType : "cardio"}</span>
               {" "}session
             </p>
             <div className="flex gap-3 mt-1.5 text-xs text-neutral-500">
-              {data.duration && <span>{Math.round(Number(data.duration) / 60)} min</span>}
-              {data.distance && <span>{Number(data.distance).toFixed(1)} mi</span>}
-              {data.calories && <span>{Math.round(Number(data.calories))} cal</span>}
+              {data.duration != null && <span>{Math.round(Number(data.duration) / 60)} min</span>}
+              {data.distance != null && <span>{Number(data.distance).toFixed(1)} mi</span>}
+              {data.calories != null && <span>{Math.round(Number(data.calories))} cal</span>}
             </div>
           </div>
         );
@@ -201,6 +215,51 @@ function WorkoutCard({ workout }: { workout: TrendingWorkout }) {
   );
 }
 
+// ─── Suggestion Card (horizontal scroll) ──────────────────────────────────────
+
+function SuggestionCard({
+  user,
+  onFollow,
+}: {
+  user: SuggestionUser;
+  onFollow: (id: string) => void;
+}) {
+  const router = useRouter();
+  const goalLabel = user.goal
+    ? user.goal.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : null;
+
+  return (
+    <div className="flex-shrink-0 w-40 bg-[#141414] border border-[#262626] rounded-2xl p-4 flex flex-col items-center gap-2">
+      <button onClick={() => user.username && router.push(`/user/${user.username}`)}>
+        <Avatar user={{ avatarUrl: user.avatarUrl, name: user.displayName || user.username || "Athlete" }} size="lg" />
+      </button>
+      <div className="text-center min-w-0 w-full">
+        <div className="font-semibold text-sm truncate">{user.displayName || user.username}</div>
+        {user.streak > 0 && (
+          <div className="text-xs text-orange-400">🔥 {user.streak} day streak</div>
+        )}
+        {goalLabel && (
+          <div className="text-xs text-neutral-500 mt-0.5 truncate">{goalLabel}</div>
+        )}
+        {user.mutualCount > 0 && (
+          <div className="text-xs text-[#0066FF] mt-0.5">{user.mutualCount} mutual</div>
+        )}
+      </div>
+      <button
+        onClick={() => onFollow(user.id)}
+        className={`w-full py-1.5 rounded-lg text-xs font-bold transition-colors ${
+          user.isFollowing
+            ? "border border-[#262626] text-neutral-400"
+            : "bg-[#0066FF] text-white"
+        }`}
+      >
+        {user.isFollowing ? "Following" : user.isPrivate ? "Request" : "Follow"}
+      </button>
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function DiscoverPage() {
@@ -208,6 +267,7 @@ export default function DiscoverPage() {
   const [searchResults, setSearchResults] = useState<UserResult[]>([]);
   const [trending, setTrending] = useState<TrendingWorkout[]>([]);
   const [popularUsers, setPopularUsers] = useState<UserResult[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestionUser[]>([]);
   const [feed, setFeed] = useState<FeedActivity[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"feed" | "trending" | "users">("feed");
@@ -215,10 +275,14 @@ export default function DiscoverPage() {
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   useEffect(() => {
-    // Load popular users
-    fetch("/api/social/search?q=a")
-      .then(r => r.json())
-      .then(d => setPopularUsers(d.users || []));
+    // Load popular users + suggestions in parallel
+    Promise.all([
+      fetch("/api/social/search?q=a").then((r) => r.json()),
+      fetch("/api/social/suggestions").then((r) => r.ok ? r.json() : { suggestions: [] }),
+    ]).then(([searchData, suggData]) => {
+      setPopularUsers(searchData.users || []);
+      setSuggestions(suggData.suggestions || []);
+    });
   }, []);
 
   useEffect(() => {
@@ -244,31 +308,23 @@ export default function DiscoverPage() {
     }, 400);
   };
 
-  const handleFollowToggle = async (userId: string) => {
-    const user = [...searchResults, ...popularUsers].find(u => u.id === userId);
-    if (!user) return;
+  const handleFollowToggle = async (targetId: string) => {
+    const isFollowing = [...searchResults, ...popularUsers].find(u => u.id === targetId)?.isFollowing
+      ?? suggestions.find(u => u.id === targetId)?.isFollowing
+      ?? false;
 
-    if (user.isFollowing) {
-      await fetch("/api/social/follow", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-      const update = (prev: UserResult[]) =>
-        prev.map(u => u.id === userId ? { ...u, isFollowing: false } : u);
-      setSearchResults(update);
-      setPopularUsers(update);
-    } else {
-      await fetch("/api/social/follow", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-      const update = (prev: UserResult[]) =>
-        prev.map(u => u.id === userId ? { ...u, isFollowing: true } : u);
-      setSearchResults(update);
-      setPopularUsers(update);
-    }
+    await fetch("/api/social/follow", {
+      method: isFollowing ? "DELETE" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: targetId }),
+    });
+
+    const nextFollowing = !isFollowing;
+    const updateList = <T extends { id: string; isFollowing: boolean }>(prev: T[]) =>
+      prev.map(u => u.id === targetId ? { ...u, isFollowing: nextFollowing } : u);
+    setSearchResults(updateList);
+    setPopularUsers(updateList);
+    setSuggestions(updateList);
   };
 
   return (
@@ -367,10 +423,32 @@ export default function DiscoverPage() {
             )}
 
             {activeTab === "users" && (
-              <div className="divide-y divide-[#1a1a1a]">
-                {popularUsers.map(u => (
-                  <UserCard key={u.id} user={u} onFollowToggle={handleFollowToggle} />
-                ))}
+              <div>
+                {/* Suggested for you — horizontal scroll */}
+                {suggestions.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-xs text-neutral-500 uppercase tracking-wide mb-3">Suggested for you</p>
+                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
+                      {suggestions.map(u => (
+                        <SuggestionCard key={u.id} user={u} onFollow={handleFollowToggle} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Popular athletes list */}
+                <p className="text-xs text-neutral-500 uppercase tracking-wide mb-3">Popular Athletes</p>
+                <div className="divide-y divide-[#1a1a1a]">
+                  {popularUsers.map(u => (
+                    <UserCard key={u.id} user={u} onFollowToggle={handleFollowToggle} />
+                  ))}
+                  {popularUsers.length === 0 && (
+                    <div className="text-center py-12 text-neutral-600 text-sm">
+                      <p className="text-3xl mb-3">👤</p>
+                      <p>No athletes found yet.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/shared/BottomNav";
 import Avatar from "@/components/Avatar";
+import { getLevelFromXP, getXPProgressPercent, getNextLevel } from "@/lib/xp-system";
 
 interface ProfileData {
   id: string;
@@ -35,6 +36,20 @@ interface ProfileData {
   } | null;
   subscription: { tier: string; status: string } | null;
   streak: { currentStreak: number; longestStreak: number } | null;
+}
+
+interface AchievementData {
+  id: string;
+  name: string;
+  icon: string;
+  unlockedAt: string;
+}
+
+interface PRData {
+  exerciseName: string;
+  weight: number;
+  reps: number;
+  date: string;
 }
 
 interface WorkoutHistoryItem {
@@ -193,6 +208,26 @@ function StatsView({ data }: { data: ProfileData }) {
           <span className="text-sm">Personal Records</span>
           <span className="text-neutral-500">→</span>
         </Link>
+        <Link href="/races" className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors">
+          <span className="text-sm">Race Goals</span>
+          <span className="text-neutral-500">→</span>
+        </Link>
+        <Link href="/journal" className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors">
+          <span className="text-sm">Journal</span>
+          <span className="text-neutral-500">→</span>
+        </Link>
+        <Link href="/seasons" className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors">
+          <span className="text-sm">Training Seasons</span>
+          <span className="text-neutral-500">→</span>
+        </Link>
+        <Link href="/tools" className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors">
+          <span className="text-sm">Tools</span>
+          <span className="text-neutral-500">→</span>
+        </Link>
+        <Link href="/settings/export" className="flex items-center justify-between px-5 py-4 hover:bg-[#1a1a1a] transition-colors">
+          <span className="text-sm">Export Data</span>
+          <span className="text-neutral-500">→</span>
+        </Link>
       </div>
     </div>
   );
@@ -203,6 +238,9 @@ export default function ProfilePage() {
   const [data, setData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"workouts" | "stats">("workouts");
+  const [totalXP, setTotalXP] = useState(0);
+  const [achievements, setAchievements] = useState<AchievementData[]>([]);
+  const [topPRs, setTopPRs] = useState<PRData[]>([]);
 
   useEffect(() => {
     fetch("/api/user/profile")
@@ -210,6 +248,23 @@ export default function ProfilePage() {
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetch("/api/achievements")
+      .then(r => r.json())
+      .then(d => {
+        setTotalXP(d.totalXP || 0);
+        const unlocked = (d.achievements || [])
+          .filter((a: any) => a.unlockedAt)
+          .slice(0, 8);
+        setAchievements(unlocked);
+      })
+      .catch(() => {});
+    fetch("/api/progress/prs")
+      .then(r => r.json())
+      .then(d => {
+        const prs = (d.prs || d.records || []).slice(0, 5);
+        setTopPRs(prs);
+      })
+      .catch(() => {});
   }, []);
 
   async function handleSignOut() {
@@ -236,6 +291,9 @@ export default function ProfilePage() {
   }
 
   const profile = data?.profile;
+  const currentLevel = getLevelFromXP(totalXP);
+  const xpPct = getXPProgressPercent(totalXP);
+  const nextLevel = getNextLevel(totalXP);
 
   return (
     <main className="min-h-screen bg-black text-white pb-28">
@@ -326,6 +384,74 @@ export default function ProfilePage() {
           <div className="text-xs text-neutral-500">Plan</div>
         </div>
       </div>
+
+      {/* XP / Level Bar */}
+      {totalXP > 0 && (
+        <div className="px-5 py-3 border-b border-[#1a1a1a]">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-[#0066FF] flex items-center justify-center text-[10px] font-black">
+                {currentLevel.level}
+              </div>
+              <span className="text-sm font-bold text-[#0066FF]">{currentLevel.name}</span>
+            </div>
+            <span className="text-xs text-neutral-500">{totalXP.toLocaleString()} XP</span>
+          </div>
+          <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#0066FF] rounded-full transition-all duration-700"
+              style={{ width: `${xpPct}%` }}
+            />
+          </div>
+          {nextLevel && (
+            <p className="text-[10px] text-neutral-600 mt-1">
+              {(nextLevel.minXP - totalXP).toLocaleString()} XP to Level {nextLevel.level} · {nextLevel.name}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Achievements Row */}
+      {achievements.length > 0 && (
+        <div className="px-5 py-3 border-b border-[#1a1a1a]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Achievements</span>
+            <Link href="/progress" className="text-xs text-[#0066FF]">See all →</Link>
+          </div>
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            {achievements.map((a) => (
+              <div
+                key={a.id}
+                className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#141414] border border-[#262626] flex items-center justify-center text-lg"
+                title={a.name}
+              >
+                {a.icon || "🏅"}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* PR Hall of Fame */}
+      {topPRs.length > 0 && (
+        <div className="px-5 py-3 border-b border-[#1a1a1a]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-[#FFB300] uppercase tracking-wider">PR Hall of Fame</span>
+            <Link href="/progress" className="text-xs text-[#0066FF]">All PRs →</Link>
+          </div>
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            {topPRs.map((pr, i) => (
+              <div
+                key={i}
+                className="flex-shrink-0 bg-[#141414] border border-[#262626] rounded-xl px-3 py-2 min-w-[120px]"
+              >
+                <p className="text-xs font-semibold truncate">{pr.exerciseName}</p>
+                <p className="text-sm font-bold text-[#FFB300]">{pr.weight} kg × {pr.reps}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-[#1a1a1a]">

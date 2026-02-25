@@ -182,23 +182,28 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get("limit") || "20");
   const offset = parseInt(searchParams.get("offset") || "0");
 
-  const logs = await prisma.workoutLog.findMany({
-    where: { userId, completedAt: { not: null } },
-    include: {
-      workout: { select: { name: true } },
-      exerciseLogs: {
-        include: {
-          exercise: { select: { name: true } },
-          sets: { orderBy: { setNumber: "asc" } },
+  try {
+    const logs = await prisma.workoutLog.findMany({
+      where: { userId, completedAt: { not: null } },
+      include: {
+        workout: { select: { name: true } },
+        exerciseLogs: {
+          include: {
+            exercise: { select: { name: true } },
+            sets: { orderBy: { setNumber: "asc" } },
+          },
         },
       },
-    },
-    orderBy: { startedAt: "desc" },
-    take: limit,
-    skip: offset,
-  });
+      orderBy: { startedAt: "desc" },
+      take: limit,
+      skip: offset,
+    });
 
-  return NextResponse.json({ logs });
+    return NextResponse.json({ logs });
+  } catch (err) {
+    console.error("GET workouts/log error:", err);
+    return NextResponse.json({ error: "Failed to fetch workout logs" }, { status: 500 });
+  }
 }
 
 async function awardXP(userId: string, amount: number) {
@@ -210,6 +215,108 @@ async function awardXP(userId: string, amount: number) {
     where: { userId },
     data: { totalXP: newXP, level: newLevel },
   });
+}
+
+// PATCH: Complete workout from active workout page (saves sets + completes in one call)
+export async function PATCH(req: NextRequest) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const body = await req.json();
+    const { logId, workoutId, sets, duration, totalVolume, completedAt } = body;
+
+    if (!logId) {
+      // If no logId, create a new log first
+      const log = await prisma.workoutLog.create({
+        data: { userId, workoutId: workoutId || "unknown", startedAt: new Date() },
+      });
+      const finalLogId = log.id;
+      await processWorkoutCompletion(userId, finalLogId, sets, duration, totalVolume, completedAt);
+      return NextResponse.json({ success: true, logId: finalLogId, duration, totalVolume });
+    }
+
+    await processWorkoutCompletion(userId, logId, sets, duration, totalVolume, completedAt);
+    return NextResponse.json({ success: true, logId, duration, totalVolume });
+  } catch (err) {
+    console.error("PATCH workouts/log error:", err);
+    return NextResponse.json({ error: "Failed to complete workout" }, { status: 500 });
+  }
+}
+
+async function processWorkoutCompletion(
+  userId: string,
+  logId: string,
+  sets: Array<{ exerciseId: string; planExerciseId?: string; setNumber: number; weight: number; reps: number; rpe?: number; completed?: boolean }>,
+  duration: number,
+  totalVolume: number,
+  completedAt?: string
+) {
+  // Group sets by exercise
+  const exerciseMap = new Map<string, typeof sets>();
+  for (const set of (sets || [])) {
+    const key = set.exerciseId;
+    if (!exerciseMap.has(key)) exerciseMap.set(key, []);
+    exerciseMap.get(key)!.push(set);
+  }
+
+  // Save exercise logs and sets
+  for (const [exerciseId, exerciseSets] of exerciseMap) {
+    let exerciseLog = await prisma.exerciseLog.findFirst({
+      where: { workoutLogId: logId, exerciseId },
+    });
+    if (!exerciseLog) {
+      exerciseLog = await prisma.exerciseLog.create({
+        data: { workoutLogId: logId, exerciseId },
+      });
+    }
+
+    for (const s of exerciseSets) {
+      // Check 1RM PR
+      const estimated1RM = estimateOneRepMax(s.weight, s.reps);
+      const currentBest = await prisma.personalRecord.findFirst({
+        where: { userId, exerciseId, type: "1rm" },
+        orderBy: { value: "desc" },
+      });
+      const isPR = !currentBest || estimated1RM > currentBest.value;
+
+      await prisma.setLog.create({
+        data: {
+          exerciseLogId: exerciseLog.id,
+          setNumber: s.setNumber,
+          weight: s.weight,
+          reps: s.reps,
+          rpe: s.rpe || null,
+          isPR,
+        },
+      });
+
+      if (isPR && s.reps <= 15) {
+        await prisma.personalRecord.create({
+          data: { userId, exerciseId, type: "1rm", value: estimated1RM, reps: s.reps },
+        });
+        await awardXP(userId, XP_VALUES.newPR);
+      }
+    }
+  }
+
+  // Mark workout complete
+  await prisma.workoutLog.update({
+    where: { id: logId },
+    data: {
+      completedAt: completedAt ? new Date(completedAt) : new Date(),
+      duration: duration || 0,
+    },
+  });
+
+  // Update streak + achievements
+  await updateStreak(userId);
+  await seedAchievements();
+  await checkAndAwardAchievements(userId);
+  await awardXP(userId, XP_VALUES.completeWorkout);
+
+  // Injury risk analysis (non-blocking)
+  analyzeInjuryRisk(userId).catch(() => {});
 }
 
 async function updateStreak(userId: string) {

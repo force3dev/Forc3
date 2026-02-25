@@ -14,41 +14,46 @@ export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  try {
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-  const prs = await prisma.personalRecord.findMany({
-    where: { userId, achievedAt: { gte: ninetyDaysAgo } },
-    include: { exercise: { select: { name: true, id: true } } },
-    orderBy: { achievedAt: "asc" },
-  });
-
-  // Group by exercise
-  const byExercise: Record<string, {
-    exerciseId: string;
-    name: string;
-    history: { date: string; e1rm: number; weight: number; reps: number }[];
-    current1RM: number;
-  }> = {};
-
-  for (const pr of prs) {
-    const name = pr.exercise.name;
-    const reps = pr.reps || 1;
-    const e1rm = Math.round(epley(pr.value, reps));
-
-    if (!byExercise[name]) {
-      byExercise[name] = { exerciseId: pr.exerciseId, name, history: [], current1RM: 0 };
-    }
-    byExercise[name].history.push({
-      date: pr.achievedAt.toISOString().slice(0, 10),
-      e1rm,
-      weight: pr.value,
-      reps,
+    const prs = await prisma.personalRecord.findMany({
+      where: { userId, achievedAt: { gte: ninetyDaysAgo } },
+      include: { exercise: { select: { name: true, id: true } } },
+      orderBy: { achievedAt: "asc" },
     });
-    byExercise[name].current1RM = Math.max(byExercise[name].current1RM, e1rm);
+
+    // Group by exercise
+    const byExercise: Record<string, {
+      exerciseId: string;
+      name: string;
+      history: { date: string; e1rm: number; weight: number; reps: number }[];
+      current1RM: number;
+    }> = {};
+
+    for (const pr of prs) {
+      const name = pr.exercise.name;
+      const reps = pr.reps || 1;
+      const e1rm = Math.round(epley(pr.value, reps));
+
+      if (!byExercise[name]) {
+        byExercise[name] = { exerciseId: pr.exerciseId, name, history: [], current1RM: 0 };
+      }
+      byExercise[name].history.push({
+        date: pr.achievedAt.toISOString().slice(0, 10),
+        e1rm,
+        weight: pr.value,
+        reps,
+      });
+      byExercise[name].current1RM = Math.max(byExercise[name].current1RM, e1rm);
+    }
+
+    const exercises = Object.values(byExercise).sort((a, b) => b.current1RM - a.current1RM);
+
+    return NextResponse.json({ exercises });
+  } catch (error: any) {
+    console.error("GET /api/progress/1rm error:", error?.message);
+    return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
   }
-
-  const exercises = Object.values(byExercise).sort((a, b) => b.current1RM - a.current1RM);
-
-  return NextResponse.json({ exercises });
 }

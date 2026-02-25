@@ -95,60 +95,65 @@ export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
 
-  // Check for existing planned cardio today
-  const existingActivity = await prisma.cardioActivity.findFirst({
-    where: {
-      userId,
-      date: { gte: today, lt: tomorrow },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+    // Check for existing planned cardio today
+    const existingActivity = await prisma.cardioActivity.findFirst({
+      where: {
+        userId,
+        date: { gte: today, lt: tomorrow },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-  if (existingActivity) {
-    return NextResponse.json({ activity: existingActivity, isPlanned: true });
-  }
+    if (existingActivity) {
+      return NextResponse.json({ activity: existingActivity, isPlanned: true });
+    }
 
-  // No planned activity — suggest one based on profile
-  const profile = await prisma.profile.findUnique({ where: { userId } });
+    // No planned activity — suggest one based on profile
+    const profile = await prisma.profile.findUnique({ where: { userId } });
 
-  // Count this week's workouts
-  const monday = new Date();
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-  const weekLogs = await prisma.workoutLog.count({
-    where: { userId, startedAt: { gte: monday }, completedAt: { not: null } },
-  });
+    // Count this week's workouts
+    const monday = new Date();
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    monday.setHours(0, 0, 0, 0);
+    const weekLogs = await prisma.workoutLog.count({
+      where: { userId, startedAt: { gte: monday }, completedAt: { not: null } },
+    });
 
-  const dayOfWeek = new Date().getDay();
-  const template = suggestCardioTemplate(
-    profile?.goal || null,
-    profile?.sport || null,
-    profile?.raceGoals || null,
-    dayOfWeek,
-    weekLogs
-  );
+    const dayOfWeek = new Date().getDay();
+    const template = suggestCardioTemplate(
+      profile?.goal || null,
+      profile?.sport || null,
+      profile?.raceGoals || null,
+      dayOfWeek,
+      weekLogs
+    );
 
-  if (!template) {
+    if (!template) {
+      return NextResponse.json({ activity: null });
+    }
+
+    return NextResponse.json({
+      activity: null,
+      suggestion: {
+        templateId: template.id,
+        type: template.type,
+        title: template.title,
+        description: template.description,
+        duration: template.duration,
+        intensity: template.intensity,
+        intervals: template.intervals || null,
+      },
+    });
+  } catch (err) {
+    console.error("cardio/today GET error:", err);
     return NextResponse.json({ activity: null });
   }
-
-  return NextResponse.json({
-    activity: null,
-    suggestion: {
-      templateId: template.id,
-      type: template.type,
-      title: template.title,
-      description: template.description,
-      duration: template.duration,
-      intensity: template.intensity,
-      intervals: template.intervals || null,
-    },
-  });
 }
 
 export async function POST(req: NextRequest) {

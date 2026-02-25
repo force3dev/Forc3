@@ -25,73 +25,78 @@ export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0, 0, 0, 0);
-  const yesterdayEnd = new Date(yesterday);
-  yesterdayEnd.setHours(23, 59, 59, 999);
+  try {
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
+    const yesterdayEnd = new Date(yesterday);
+    yesterdayEnd.setHours(23, 59, 59, 999);
 
-  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const [profile, yesterdayCardio, recentLogs, weekLogs] = await Promise.all([
-    prisma.profile.findUnique({ where: { userId } }),
-    prisma.cardioActivity.findMany({
-      where: { userId, completed: true, completedAt: { gte: yesterday, lte: yesterdayEnd } },
-      select: { intensity: true },
-    }),
-    prisma.workoutLog.findMany({
-      where: { userId, startedAt: { gte: threeDaysAgo }, completedAt: { not: null } },
-      select: { startedAt: true, overallRpe: true },
-      orderBy: { startedAt: "desc" },
-    }),
-    prisma.workoutLog.findMany({
-      where: { userId, startedAt: { gte: sevenDaysAgo }, completedAt: { not: null } },
-      select: { startedAt: true },
-    }),
-  ]);
+    const [profile, yesterdayCardio, recentLogs, weekLogs] = await Promise.all([
+      prisma.profile.findUnique({ where: { userId } }),
+      prisma.cardioActivity.findMany({
+        where: { userId, completed: true, completedAt: { gte: yesterday, lte: yesterdayEnd } },
+        select: { intensity: true },
+      }),
+      prisma.workoutLog.findMany({
+        where: { userId, startedAt: { gte: threeDaysAgo }, completedAt: { not: null } },
+        select: { startedAt: true, overallRpe: true },
+        orderBy: { startedAt: "desc" },
+      }),
+      prisma.workoutLog.findMany({
+        where: { userId, startedAt: { gte: sevenDaysAgo }, completedAt: { not: null } },
+        select: { startedAt: true },
+      }),
+    ]);
 
-  const hardYesterday =
-    yesterdayCardio.some((a) => ["hard", "max"].includes((a.intensity || "").toLowerCase())) ||
-    recentLogs.some((l) => l.startedAt >= yesterday && (l.overallRpe ?? 0) >= 8);
+    const hardYesterday =
+      yesterdayCardio.some((a) => ["hard", "max"].includes((a.intensity || "").toLowerCase())) ||
+      recentLogs.some((l) => l.startedAt >= yesterday && (l.overallRpe ?? 0) >= 8);
 
-  const hardWorkouts = recentLogs.filter((l) => (l.overallRpe ?? 0) >= 8).length;
-  const trainingDays = new Set(weekLogs.map((l) => l.startedAt.toISOString().slice(0, 10))).size;
-  const recovery = calculateRecoveryScore({
-    workoutsLast3Days: recentLogs.length,
-    hardWorkoutsLast3Days: hardWorkouts,
-    restDaysLast7Days: 7 - trainingDays,
-    consecutiveTrainingDays: 0,
-  });
+    const hardWorkouts = recentLogs.filter((l) => (l.overallRpe ?? 0) >= 8).length;
+    const trainingDays = new Set(weekLogs.map((l) => l.startedAt.toISOString().slice(0, 10))).size;
+    const recovery = calculateRecoveryScore({
+      workoutsLast3Days: recentLogs.length,
+      hardWorkoutsLast3Days: hardWorkouts,
+      restDaysLast7Days: 7 - trainingDays,
+      consecutiveTrainingDays: 0,
+    });
 
-  const ranked = CARDIO_TEMPLATES.map((template) => ({
-    ...template,
-    score: scoreTemplate(template, now.getDay(), hardYesterday, recovery.score),
-  })).sort((a, b) => b.score - a.score);
+    const ranked = CARDIO_TEMPLATES.map((template) => ({
+      ...template,
+      score: scoreTemplate(template, now.getDay(), hardYesterday, recovery.score),
+    })).sort((a, b) => b.score - a.score);
 
-  const recommendedId = ranked[0]?.id;
+    const recommendedId = ranked[0]?.id;
 
-  const grouped = TYPE_ORDER.map((type) => {
-    const options = ranked.filter((t) => t.type === type || (type === "run" && t.type === "sprint"));
-    return {
-      type,
-      options: options.map((o) => ({
-        id: o.id,
-        title: o.title,
-        description: o.description,
-        duration: o.duration,
-        intensity: o.intensity,
-        recommended: o.id === recommendedId,
-      })),
-    };
-  }).filter((group) => group.options.length > 0);
+    const grouped = TYPE_ORDER.map((type) => {
+      const options = ranked.filter((t) => t.type === type || (type === "run" && t.type === "sprint"));
+      return {
+        type,
+        options: options.map((o) => ({
+          id: o.id,
+          title: o.title,
+          description: o.description,
+          duration: o.duration,
+          intensity: o.intensity,
+          recommended: o.id === recommendedId,
+        })),
+      };
+    }).filter((group) => group.options.length > 0);
 
-  return NextResponse.json({
-    date: now.toISOString().slice(0, 10),
-    recoveryScore: recovery.score,
-    recommendedWorkoutId: recommendedId,
-    goal: profile?.goal || null,
-    groups: grouped,
-  });
+    return NextResponse.json({
+      date: now.toISOString().slice(0, 10),
+      recoveryScore: recovery.score,
+      recommendedWorkoutId: recommendedId,
+      goal: profile?.goal || null,
+      groups: grouped,
+    });
+  } catch (error: any) {
+    console.error("GET /api/cardio/recommendations error:", error?.message);
+    return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
+  }
 }

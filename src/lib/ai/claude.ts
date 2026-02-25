@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { generateHybridWeek, formatHybridWeekForCoach } from "@/lib/program-generator";
+import { AI_MODELS } from "@/lib/ai/models";
 
 // ─── Client ───────────────────────────────────────────────────────────────────
 
@@ -241,9 +242,15 @@ export async function askCoach(userId: string, message: string): Promise<string>
   ];
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: AI_MODELS.BALANCED,
     max_tokens: 1024,
-    system: systemPrompt,
+    system: [
+      {
+        type: "text",
+        text: systemPrompt,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     messages,
   });
 
@@ -274,7 +281,7 @@ export async function estimateCalories(description: string): Promise<{
   const client = getClient();
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: AI_MODELS.FAST,
     max_tokens: 256,
     messages: [{
       role: "user",
@@ -317,7 +324,7 @@ export async function generateWorkoutNotes(
   const recentSummary = formatRecentWorkouts(recentLogs);
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: AI_MODELS.FAST,
     max_tokens: 256,
     messages: [{
       role: "user",
@@ -507,14 +514,15 @@ Goal-specific guidance:
 - endurance: sport-specific cardio programming, 2x/week max strength
 - sport_performance: explosive power, conditioning, sport-specific movements
 - longevity: joint-friendly movements, mobility, sustainable training
-- hybrid: balance strength and cardio based on days available
-- triathlon: all three disciplines + strength support
+- hybrid: HYBRID ATHLETE — develop BOTH strength and endurance simultaneously. Include 2-3 strength sessions (compound movements, progressive overload) AND 2-3 cardio sessions (runs, bike, swim based on equipment). Separate strength and cardio to avoid interference (no hard runs after leg day). Focus on athleticism over aesthetics. Use strength training that complements endurance (posterior chain, core, hip mobility). Progressive cardio structure (base → tempo → speed).
+- race_training: Primary focus is the race goal. Strength training is supplementary. Build to peak volume 3 weeks before race, then taper.
+- triathlon: TRIATHLON ATHLETE — program MUST include all three disciplines. Swim sessions (technique + endurance), bike sessions (long aerobic + intervals), run sessions (base + brick workouts). Include brick workouts (bike→run transitions). 1 strength session for injury prevention (glutes, hip flexors, shoulders, core).
 
 Sunday should always be rest or active recovery.
 Return only the JSON object.`;
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: AI_MODELS.POWERFUL,
     max_tokens: 4096,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],

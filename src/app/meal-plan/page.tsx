@@ -100,7 +100,7 @@ export default function MealPlanPage() {
           <span className="text-2xl">🍽️</span>
           <div>
             <p className="font-semibold text-sm">Restaurant Mode</p>
-            <p className="text-xs text-neutral-500">Tell me where you&apos;re eating — I&apos;ll build your order</p>
+            <p className="text-xs text-neutral-500">Tell me where you're eating — I'll build your order</p>
           </div>
           <span className="ml-auto text-neutral-500">→</span>
         </button>
@@ -212,7 +212,7 @@ export default function MealPlanPage() {
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#141414] rounded-t-3xl p-5 pb-10">
             <div className="w-10 h-1 bg-[#333] rounded-full mx-auto mb-5" />
             <h2 className="text-xl font-bold mb-1">🍽️ Restaurant Mode</h2>
-            <p className="text-sm text-neutral-400 mb-4">I&apos;ll build your order to hit your remaining macros.</p>
+            <p className="text-sm text-neutral-400 mb-4">I'll build your order to hit your remaining macros.</p>
 
             <div className="flex gap-2 mb-4">
               <input

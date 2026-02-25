@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { AI_MODELS } from "@/lib/ai/models";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +102,7 @@ Include breakfast, lunch, dinner, and one snack per day. Make foods practical, w
   let parsed: { days: unknown[]; groceryList: unknown[] };
   try {
     const resp = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODELS.BALANCED,
       max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
     });

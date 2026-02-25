@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { AI_MODELS } from "@/lib/ai/models";
 
 function getClient() {
   const key = process.env.CLAUDE_API_KEY;
@@ -120,7 +121,7 @@ export async function analyzePersonality(userId: string): Promise<void> {
 
   try {
     const resp = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODELS.FAST,
       max_tokens: 256,
       messages: [
         {

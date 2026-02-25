@@ -1,22 +1,24 @@
 {
-  "name": "FORC3 — Hybrid Athlete Coach",
+  "name": "FORC3 — AI Athlete Coach",
   "short_name": "FORC3",
-  "description": "PhD-Level Coaching at App Prices",
-  "start_url": "/",
+  "description": "PhD-Level coaching at app prices",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
   "background_color": "#000000",
   "theme_color": "#000000",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["health", "fitness", "sports"],
+  "shortcuts": [
+    { "name": "Start Workout", "url": "/workout", "description": "Begin today's workout" },
+    { "name": "Log Food", "url": "/nutrition", "description": "Log what you ate" },
+    { "name": "Chat with Coach", "url": "/coach", "description": "Message Coach Alex" }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
 }

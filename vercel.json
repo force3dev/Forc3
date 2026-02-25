@@ -1,20 +1,16 @@
 {
-  "crons": [
+  "headers": [
     {
-      "path": "/api/notifications/send-checkin",
-      "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/emails/weekly-recap",
-      "schedule": "0 18 * * 0"
-    },
-    {
-      "path": "/api/emails/streak-reminder",
-      "schedule": "0 18 * * *"
-    },
-    {
-      "path": "/api/challenges/generate-weekly",
-      "schedule": "0 0 * * 1"
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Service-Worker-Allowed", "value": "/" },
+        { "key": "Cache-Control", "value": "no-cache" }
+      ]
     }
+  ],
+  "crons": [
+    { "path": "/api/cron/morning-checkin", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/streak-check", "schedule": "0 5 * * *" },
+    { "path": "/api/challenges/generate-weekly", "schedule": "0 0 * * 1" }
   ]
 }

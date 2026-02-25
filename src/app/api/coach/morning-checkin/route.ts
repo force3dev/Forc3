@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { AI_MODELS } from "@/lib/ai/models";
 import { generateHybridWeek, getTodayCardioFromPlan } from "@/lib/program-generator";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ Don't guilt trip. Be real and warm. Sound like Coach Alex.`;
 
   try {
     const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODELS.BALANCED,
       max_tokens: 150,
       messages: [{ role: "user", content: prompt }],
     });
@@ -79,13 +80,22 @@ export async function GET(req: Request) {
   // Handle missed workout check separately
   if (checkMissed) {
     if (!client) return NextResponse.json({ show: false, message: "", daysSince: 0 });
-    return NextResponse.json(await getMissedWorkoutMessage(userId, client));
+    try {
+      return NextResponse.json(await getMissedWorkoutMessage(userId, client));
+    } catch {
+      return NextResponse.json({ show: false, message: "", daysSince: 0 });
+    }
   }
 
-  const [profile, sub] = await Promise.all([
-    prisma.profile.findUnique({ where: { userId } }),
-    prisma.subscription.findUnique({ where: { userId } }),
-  ]);
+  let profile, sub;
+  try {
+    [profile, sub] = await Promise.all([
+      prisma.profile.findUnique({ where: { userId } }),
+      prisma.subscription.findUnique({ where: { userId } }),
+    ]);
+  } catch {
+    return NextResponse.json({ message: "Good morning! Today's plan is ready. Let's get after it. 💪", cached: false });
+  }
 
   if (
     sub?.morningCheckinMessage &&
@@ -162,7 +172,7 @@ Keep it punchy. No fluff.`;
 
   try {
     const response = await clientForCheckin.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODELS.BALANCED,
       max_tokens: 200,
       messages: [{ role: "user", content: prompt }],
     });

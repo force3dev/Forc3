@@ -29,10 +29,19 @@
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  touch-action: pan-y;
+}
+
+button, a {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 html {
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
 }
 
 body {
@@ -42,6 +51,42 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
+}
+
+/* iOS input zoom prevention - font must be 16px+ */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+/* Safe areas for iPhone notch + home bar */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Bottom nav always above home bar */
+.bottom-nav {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+}
+
+/* Content never hidden behind bottom nav */
+.page-content {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
+}
+
+/* Momentum scrolling on scroll containers */
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+}
+
+/* Remove default iOS button styles */
+button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Prevent double-tap zoom */
+* {
+  touch-action: manipulation;
 }
 
 /* Hide scrollbars but keep scrollability */
@@ -84,6 +129,11 @@ input[type="number"] {
 /* Disable default button styles */
 button {
   cursor: pointer;
+}
+
+/* Touch target sizes for iOS — 44px minimum */
+button, a, [role="button"] {
+  min-height: 44px;
 }
 
 /* Prevent body scroll when modal open */

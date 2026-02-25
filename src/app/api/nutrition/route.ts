@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { dbErrorResponse } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -17,37 +18,41 @@ export async function GET(req: NextRequest) {
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
-  const [logs, profile] = await Promise.all([
-    prisma.nutritionLog.findMany({
-      where: {
-        userId,
-        date: { gte: startOfDay, lte: endOfDay },
+  try {
+    const [logs, profile] = await Promise.all([
+      prisma.nutritionLog.findMany({
+        where: {
+          userId,
+          date: { gte: startOfDay, lte: endOfDay },
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.profile.findUnique({ where: { userId } }),
+    ]);
+
+    const totals = logs.reduce(
+      (acc, log) => ({
+        calories: acc.calories + log.calories,
+        protein: acc.protein + log.protein,
+        carbs: acc.carbs + log.carbs,
+        fat: acc.fat + log.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+
+    return NextResponse.json({
+      logs,
+      totals,
+      targets: {
+        calories: profile?.targetCalories || 2000,
+        protein: profile?.targetProtein || 150,
+        carbs: profile?.targetCarbs || 200,
+        fat: profile?.targetFat || 65,
       },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.profile.findUnique({ where: { userId } }),
-  ]);
-
-  const totals = logs.reduce(
-    (acc, log) => ({
-      calories: acc.calories + log.calories,
-      protein: acc.protein + log.protein,
-      carbs: acc.carbs + log.carbs,
-      fat: acc.fat + log.fat,
-    }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
-  );
-
-  return NextResponse.json({
-    logs,
-    totals,
-    targets: {
-      calories: profile?.targetCalories || 2000,
-      protein: profile?.targetProtein || 150,
-      carbs: profile?.targetCarbs || 200,
-      fat: profile?.targetFat || 65,
-    },
-  });
+    });
+  } catch (err) {
+    return dbErrorResponse(err);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -88,10 +93,13 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-  // Verify ownership
-  const log = await prisma.nutritionLog.findFirst({ where: { id, userId } });
-  if (!log) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  try {
+    const log = await prisma.nutritionLog.findFirst({ where: { id, userId } });
+    if (!log) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await prisma.nutritionLog.delete({ where: { id } });
-  return NextResponse.json({ success: true });
+    await prisma.nutritionLog.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return dbErrorResponse(err);
+  }
 }

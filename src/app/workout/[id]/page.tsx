@@ -363,6 +363,24 @@ export default function WorkoutPage() {
 
   const startTime = useRef(Date.now());
 
+  // Screen wake lock — keep screen on during workout
+  useEffect(() => {
+    let wakeLock: { release: () => Promise<void> } | null = null;
+    async function requestWakeLock() {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await (navigator as Navigator & {
+            wakeLock: { request(type: string): Promise<{ release(): Promise<void> }> };
+          }).wakeLock.request("screen");
+        }
+      } catch {
+        // Wake lock not available on this device
+      }
+    }
+    requestWakeLock();
+    return () => { wakeLock?.release().catch(() => {}); };
+  }, []);
+
   // Load workout data
   useEffect(() => {
     async function load() {

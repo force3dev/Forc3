@@ -87,6 +87,32 @@ model User {
   mealPlans        MealPlan[]
   seasons          Season[]
   bossBattleEntries BossBattleEntry[]
+
+  // DMs
+  messagesSent     Message[]      @relation("MessagesSent")
+  messagesReceived Message[]      @relation("MessagesReceived")
+  conversationsAsUser1 Conversation[] @relation("ConvUser1")
+  conversationsAsUser2 Conversation[] @relation("ConvUser2")
+
+  // Coach memory
+  coachMemories    CoachMemory[]
+
+  // Saved meals
+  savedMeals       SavedMeal[]
+
+  // Feed reactions
+  reactions        Reaction[]
+  feedComments     FeedComment[]
+
+  // Waitlist & XP
+  morningCheckIns  MorningCheckIn[]
+
+  // Supplements
+  supplementLogs   SupplementLog[]
+
+  // Live workout sessions
+  liveWorkoutSessions LiveWorkoutSession[] @relation("LiveWorkoutHost")
+  liveWorkoutUpdates  LiveWorkoutUpdate[]  @relation("LiveWorkoutUpdates")
 }
 
 model Profile {
@@ -594,13 +620,15 @@ model Block {
 }
 
 model Activity {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // workout_completed, pr_hit, streak_milestone, started_program
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String        // workout_completed, pr_hit, streak_milestone, started_program
   data      Json
-  isPublic  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  isPublic  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  reactions Reaction[]
+  feedComments FeedComment[]
 
   @@index([userId])
 }
@@ -654,8 +682,10 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // new_follower, workout_copied, workout_liked, comment, follow_request
-  data      Json
+  type      String   // new_follower, workout_copied, workout_liked, comment, follow_request, reaction, achievement, system
+  title     String   @default("")
+  body      String   @default("")
+  data      Json     @default("{}")
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -918,7 +948,34 @@ model Season {
   weekNumber         Int      @default(1)
   createdAt          DateTime @default(now())
 
+  seasonXP SeasonXP[]
+
   @@index([userId])
+}
+
+model SeasonXP {
+  id        String   @id @default(cuid())
+  userId    String
+  seasonId  String
+  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  totalXP   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, seasonId])
+  @@index([seasonId])
+}
+
+// ─── Journal ─────────────────────────────────────────────────────────────────
+
+model JournalEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  entry     String
+  mood      String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
 }
 
 // ─── Boss Battles ─────────────────────────────────────────────────────────────
@@ -950,4 +1007,198 @@ model BossBattleEntry {
 
   @@unique([userId, bossBattleId])
   @@index([userId])
+}
+
+// ─── Direct Messages ──────────────────────────────────────────────────────────
+
+model Conversation {
+  id            String    @id @default(cuid())
+  user1Id       String
+  user2Id       String
+  user1         User      @relation("ConvUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2         User      @relation("ConvUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  lastMessage   String?
+  lastMessageAt DateTime?
+  messages      Message[]
+  createdAt     DateTime  @default(now())
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  receiverId     String
+  sender         User         @relation("MessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver       User         @relation("MessagesReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+  content        String
+  read           Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+// ─── Coach Memory ─────────────────────────────────────────────────────────────
+
+model CoachMemory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memory    String
+  type      String   // preference | achievement | struggle | goal | personal
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── Saved Meals ──────────────────────────────────────────────────────────────
+
+model SavedMeal {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name     String
+  items    Json     // [{foodName, calories, protein, carbs, fat, quantity, unit}]
+  calories Int
+  protein  Float
+  carbs    Float
+  fat      Float
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── Feed Reactions & Comments ────────────────────────────────────────────────
+
+model Reaction {
+  id         String   @id @default(cuid())
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji      String   // fire | strong | clap | star
+
+  @@unique([activityId, userId, emoji])
+  @@index([activityId])
+}
+
+model FeedComment {
+  id         String   @id @default(cuid())
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([activityId])
+}
+
+// ─── Waitlist ──────────────────────────────────────────────────────────────────
+
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  goal      String?
+  source    String?
+  createdAt DateTime @default(now())
+}
+
+// ─── Page Analytics ────────────────────────────────────────────────────────────
+
+model PageView {
+  id        String   @id @default(cuid())
+  userId    String?
+  path      String
+  userAgent String?
+  country   String?
+  createdAt DateTime @default(now())
+
+  @@index([path, createdAt])
+}
+
+// ─── Morning Check-In ─────────────────────────────────────────────────────────
+
+model MorningCheckIn {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date          DateTime @default(now())
+  sleepHours    Float?
+  sleepQuality  Int?
+  energyLevel   Int?
+  sorenessLevel Int?
+  sorenessAreas String   @default("[]")
+  stressLevel   Int?
+  notes         String?
+  recoveryScore Int?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+// ─── Race Goal ────────────────────────────────────────────────────────────────
+
+model RaceGoal {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  type      String
+  date      DateTime
+  goalTime  String?
+  status    String   @default("upcoming")
+  result    String?
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+// ─── Live Workout Sessions ──────────────────────────────────────────────────
+
+model LiveWorkoutSession {
+  id        String               @id @default(cuid())
+  roomCode  String               @unique
+  hostId    String
+  host      User                 @relation("LiveWorkoutHost", fields: [hostId], references: [id], onDelete: Cascade)
+  status    String               @default("active") // active | completed
+  createdAt DateTime             @default(now())
+  updates   LiveWorkoutUpdate[]
+
+  @@index([hostId])
+  @@index([roomCode])
+}
+
+model LiveWorkoutUpdate {
+  id        String              @id @default(cuid())
+  sessionId String
+  session   LiveWorkoutSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User                @relation("LiveWorkoutUpdates", fields: [userId], references: [id], onDelete: Cascade)
+  type      String              // "set_complete" | "reaction" | "join" | "leave"
+  data      Json                // {exercise, weight, reps, emoji, message}
+  createdAt DateTime            @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([userId])
+}
+
+// ─── Supplement Tracking ─────────────────────────────────────────────────────
+
+model SupplementLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  dose      String?
+  time      String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { AI_MODELS } from "@/lib/ai/models";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,7 @@ Be specific with real menu items from ${restaurant}. Maximize protein while hitt
 
   try {
     const resp = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODELS.FAST,
       max_tokens: 512,
       messages: [{ role: "user", content: prompt }],
     });

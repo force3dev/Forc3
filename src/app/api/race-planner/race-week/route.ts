@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/session';
 import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_MODELS } from '@/lib/ai/models';
 export const dynamic = 'force-dynamic';
 
 const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY! });
@@ -35,7 +36,7 @@ Include race morning routine: wake time, breakfast, warm up.
 Keep volume under 30% of normal. Coach tone: calm, confident.`;
 
   const msg = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: AI_MODELS.POWERFUL,
     max_tokens: 600,
     messages: [{ role: 'user', content: prompt }],
   });

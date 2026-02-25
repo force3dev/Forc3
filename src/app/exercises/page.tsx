@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import MuscleDiagram from "@/components/MuscleDiagram";
+import { ExerciseGif } from "@/components/ExerciseGif";
 
 type Exercise = {
   id: string;
@@ -14,6 +15,7 @@ type Exercise = {
   muscleGroupsParsed: string[];
   secondaryMusclesParsed: string[];
   equipmentParsed: string[];
+  gifUrl?: string | null;
 };
 
 const MUSCLE_GROUPS = [
@@ -223,9 +225,14 @@ export default function ExerciseBrowserPage() {
                 href={`/exercise/${ex.slug || ex.id}`}
                 className="flex items-center gap-3 bg-[#141414] border border-[#1a1a1a] rounded-xl px-4 py-3 hover:bg-[#1a1a1a] transition-colors"
               >
-                {/* Category Icon */}
-                <div className="w-10 h-10 rounded-xl bg-[#1a1a1a] flex items-center justify-center text-lg flex-shrink-0">
-                  {categoryIcon(ex.category)}
+                {/* Exercise GIF Thumbnail */}
+                <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0">
+                  <ExerciseGif
+                    gifUrl={ex.gifUrl}
+                    exerciseName={ex.name}
+                    size="thumbnail"
+                    className="!w-10 !h-10 !rounded-xl"
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{ex.name}</p>
